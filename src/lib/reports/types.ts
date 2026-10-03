@@ -10,6 +10,8 @@ export type JobFact = {
   stage: string;
   createdDate: string;            // local (Central) date
   contractCents: number | null;
+  /** Sales per trade from each trade's chosen package. Empty for older jobs with no per-trade packages. */
+  divisionSalesCents?: Record<string, number>;
   wonDate: string | null;         // first time the job entered contract_signed; null if it never did
   inProductionDate: string | null;
   installDate: string | null;     // scheduled install date

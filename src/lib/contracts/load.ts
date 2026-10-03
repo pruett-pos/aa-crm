@@ -1,8 +1,12 @@
+import type { Division } from "../rules.ts";
 import type { Tier } from "../scopes/types.ts";
 import type { ContractStore } from "./types.ts";
 
 export type ContractInfo = {
-  selectedTier: Tier | null;
+  /** Every trade on the job, in order, with the package chosen for it (if any). */
+  trades: { division: Division; selectedTier: Tier | null; packageTitle: string | null; subtotalCents: number | null }[];
+  /** True when every trade has a chosen package, so the contract can be prepared. */
+  allTradesChosen: boolean;
   contractCents: number | null;
   depositRequiredCents: number;
   customerName: string;
@@ -14,9 +18,14 @@ export type ContractInfo = {
 export async function loadContractInfo(store: ContractStore, jobId: string): Promise<ContractInfo | null> {
   const job = await store.getContractJob(jobId);
   if (!job) return null;
-  const [scope, doc] = await Promise.all([store.getSelectedScope(jobId), store.getLiveContract(jobId)]);
+  const [chosen, doc] = await Promise.all([store.getSelectedScopes(jobId), store.getLiveContract(jobId)]);
+  const trades = (job.divisions as Division[]).map((division) => {
+    const s = chosen.find((x) => x.division === division);
+    return { division, selectedTier: s?.tier ?? null, packageTitle: s?.title ?? null, subtotalCents: s ? s.saleCents : null };
+  });
   return {
-    selectedTier: scope?.tier ?? null,
+    trades,
+    allTradesChosen: trades.length > 0 && trades.every((t) => t.selectedTier !== null),
     contractCents: job.contractCents,
     depositRequiredCents: job.depositRequiredCents,
     customerName: job.customerName,

@@ -8,13 +8,16 @@ import { computeScope } from "@/lib/scopes/service.ts";
 import type { ScopeView } from "@/lib/scopes/service.ts";
 import type { CatalogItem } from "@/lib/scopes/load.ts";
 import { TIERS, type LineKind, type ScopeItemInput, type Tier } from "@/lib/scopes/types.ts";
-import { SCOPE_DEFAULT_TARGET_MARGIN_BPS, commissionRateBps } from "@/lib/rules.ts";
+import { DIVISIONS } from "@/lib/leads/types.ts";
+import { SCOPE_DEFAULT_TARGET_MARGIN_BPS, commissionRateBps, type Division } from "@/lib/rules.ts";
 
 type Line = { kind: LineKind; productId: string; description: string; quantity: string; unitCost: string };
 type Draft = { title: string; targetPct: string; lines: Line[] };
 
 const money = (cents: number) => (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const pct = (bps: number) => `${(bps / 100).toFixed(1)}%`;
+const tradeName = (d: string) => (en.leads.divisionNames as Record<string, string>)[d] ?? d;
+const keyOf = (division: string, tier: Tier) => `${division}:${tier}`;
 
 function draftFrom(view: ScopeView | undefined, tier: Tier): Draft {
   if (!view) return { title: en.scope.tiers[tier], targetPct: String(SCOPE_DEFAULT_TARGET_MARGIN_BPS / 100), lines: [] };
@@ -44,28 +47,37 @@ function toInput(d: Draft): { targetMarginBps: number; items: ScopeItemInput[] }
 export function ScopeBuilder(props: {
   jobId: string; canEdit: boolean; role: Role; products: CatalogItem[];
   initial: ScopeView[]; commissionOwnTruck: boolean | null;
-  selectedTier: Tier | null; locked: boolean;
+  /** The trades on this job, in order. */
+  divisions: string[];
+  /** The package chosen for each trade (null if none yet). */
+  chosen: Record<string, Tier | null>;
+  locked: boolean;
 }) {
-  const { jobId, canEdit, role, products, commissionOwnTruck, selectedTier, locked } = props;
+  const { jobId, canEdit, role, products, commissionOwnTruck, divisions, chosen, locked } = props;
   const router = useRouter();
-  const [selectFailed, setSelectFailed] = useState(false);
   const showMargin = can(role, "seeScopeMargin");
-  const [tier, setTier] = useState<Tier>("good");
-  const [drafts, setDrafts] = useState<Record<Tier, Draft>>(() => {
-    const by = (t: Tier) => props.initial.find((s) => s.tier === t);
-    return { good: draftFrom(by("good"), "good"), better: draftFrom(by("better"), "better"), best: draftFrom(by("best"), "best") };
-  });
-  const [saved, setSaved] = useState<Record<Tier, ScopeView | undefined>>(() => ({
-    good: props.initial.find((s) => s.tier === "good"),
-    better: props.initial.find((s) => s.tier === "better"),
-    best: props.initial.find((s) => s.tier === "best"),
-  }));
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
 
-  const draft = drafts[tier];
+  const [activeTrade, setActiveTrade] = useState<string>(divisions[0] ?? "");
+  const division = (divisions.includes(activeTrade) ? activeTrade : divisions[0]) as Division;
+  const [tier, setTier] = useState<Tier>("good");
+  const key = keyOf(division, tier);
+  const selectedTier = chosen[division] ?? null;
+
+  // Saved views come from the server; drafts are what the estimator is typing (one per trade and tier).
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [savedMap, setSavedMap] = useState<Record<string, ScopeView>>(() =>
+    Object.fromEntries(props.initial.map((s) => [keyOf(s.division, s.tier), s])));
+  const saved = savedMap[key];
+  const draft = drafts[key] ?? draftFrom(saved, tier);
+
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [selectFailed, setSelectFailed] = useState(false);
+  const [tradeError, setTradeError] = useState<string | null>(null);
+  const [newTrade, setNewTrade] = useState("");
+
   const update = (patch: Partial<Draft>) => {
     setStatus("idle");
-    setDrafts((d) => ({ ...d, [tier]: { ...d[tier], ...patch } }));
+    setDrafts((d) => ({ ...d, [key]: { ...(d[key] ?? draftFrom(saved, tier)), ...patch } }));
   };
   const setLine = (i: number, patch: Partial<Line>) =>
     update({ lines: draft.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) });
@@ -76,52 +88,98 @@ export function ScopeBuilder(props: {
   const preview = useMemo(() => {
     if (!canEdit) return null;
     try {
-      return computeScope({ tier, title: draft.title || "x", ...toInput(draft) }, products.map((p) => ({ ...p, sku: "" })));
+      return computeScope(
+        { division, tier, title: draft.title || "x", ...toInput(draft) },
+        products.map((p) => ({ ...p, sku: "" })), [division],
+      );
     } catch {
       return null;
     }
-  }, [canEdit, draft, tier, products]);
+  }, [canEdit, draft, tier, division, products]);
 
   async function save() {
     setStatus("saving");
-    const res = await fetch(`/api/jobs/${jobId}/scopes/${tier}`, {
+    const res = await fetch(`/api/jobs/${jobId}/scopes/${division}/${tier}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: draft.title, ...toInput(draft) }),
     });
     if (!res.ok) return setStatus("failed");
     const view = (await res.json()) as ScopeView;
-    setSaved((s) => ({ ...s, [tier]: view }));
+    setSavedMap((m) => ({ ...m, [key]: view }));
     setStatus("saved");
-    router.refresh(); // saving the selected package voids the selection and any unsigned contract
+    router.refresh(); // saving a chosen package voids that trade's choice and any unsigned contract
   }
 
   async function selectThis() {
     setSelectFailed(false);
-    const res = await fetch(`/api/jobs/${jobId}/scopes/${tier}/select`, { method: "POST" });
+    const res = await fetch(`/api/jobs/${jobId}/scopes/${division}/${tier}/select`, { method: "POST" });
     if (!res.ok) return setSelectFailed(true);
     router.refresh();
   }
 
-  const shown = preview ?? (saved[tier] && showMargin ? {
-    saleCents: saved[tier]!.saleCents, costCents: saved[tier]!.costCents ?? 0, marginBps: saved[tier]!.marginBps ?? 0,
+  async function changeTrade(action: "add" | "remove", target: string) {
+    setTradeError(null);
+    const res = await fetch(`/api/jobs/${jobId}/divisions`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, division: target }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      const errs = en.scope.tradeErrors as Record<string, string>;
+      return setTradeError(errs[body.error ?? ""] ?? en.scope.tradeErrors.generic);
+    }
+    if (action === "add") { setNewTrade(""); setActiveTrade(target); }
+    router.refresh();
+  }
+
+  const shown = preview ?? (saved && showMargin ? {
+    saleCents: saved.saleCents, costCents: saved.costCents ?? 0, marginBps: saved.marginBps ?? 0,
   } : null);
   const rate = shown && commissionOwnTruck !== null ? commissionRateBps(shown.marginBps, commissionOwnTruck) : null;
   const lowMargin = shown && shown.saleCents > 0 && shown.marginBps < 4000;
+  const addable = DIVISIONS.filter((d) => !divisions.includes(d));
 
   return (
     <div>
-      <div className="tabs" role="tablist">
+      {divisions.length > 1 && <p className="muted small-text">{en.scope.tradesHelp}</p>}
+
+      {/* One tab per trade on the job. */}
+      <div className="tabs" role="tablist" aria-label="Trades">
+        {divisions.map((d) => (
+          <button key={d} role="tab" aria-selected={d === division} className={d === division ? "tab on" : "tab"}
+            onClick={() => { setActiveTrade(d); setStatus("idle"); setSelectFailed(false); }}>
+            {tradeName(d)}{chosen[d] && <span className="tick" title={en.scope.tradeChosenTitle}> ✓</span>}
+          </button>
+        ))}
+      </div>
+
+      {canEdit && !locked && (
+        <div className="row">
+          <select aria-label={en.scope.addTrade} value={newTrade} onChange={(e) => setNewTrade(e.target.value)}>
+            <option value="">{en.scope.addTrade}</option>
+            {addable.map((d) => <option key={d} value={d}>{tradeName(d)}</option>)}
+          </select>
+          <button className="secondary small" disabled={!newTrade} onClick={() => changeTrade("add", newTrade)}>{en.scope.addTradeButton}</button>
+          {divisions.length > 1 && (
+            <button className="secondary small" onClick={() => { if (window.confirm(en.scope.removeTradeConfirm(tradeName(division)))) changeTrade("remove", division); }}>
+              {en.scope.removeTrade}
+            </button>
+          )}
+          {tradeError && <span className="error">{tradeError}</span>}
+        </div>
+      )}
+
+      <div className="tabs" role="tablist" aria-label="Packages">
         {TIERS.map((t) => (
           <button key={t} role="tab" aria-selected={t === tier} className={t === tier ? "tab on" : "tab"}
-            onClick={() => { setTier(t); setStatus("idle"); }}>
+            onClick={() => { setTier(t); setStatus("idle"); setSelectFailed(false); }}>
             {en.scope.tiers[t]}{t === selectedTier && <span className="tick" title={en.contract.selected}> ✓</span>}
           </button>
         ))}
       </div>
 
       {!canEdit && <p className="muted">{en.scope.readOnly}</p>}
-      {!canEdit && !saved[tier] && <p className="muted">{en.scope.noScopeYet}</p>}
+      {!canEdit && !saved && <p className="muted">{en.scope.noScopeYet}</p>}
 
       {canEdit ? (
         <>
@@ -176,11 +234,11 @@ export function ScopeBuilder(props: {
           </div>
         </>
       ) : (
-        saved[tier] && (
+        saved && (
           <table className="lines">
             <thead><tr><th>{en.scope.description}</th><th>{en.scope.quantity}</th><th>{en.scope.unitPrice}</th></tr></thead>
             <tbody>
-              {saved[tier]!.items.map((i, idx) => (
+              {saved.items.map((i, idx) => (
                 <tr key={idx}><td>{i.description}</td><td>{i.quantity}</td><td>{money(i.unitPriceCents)}</td></tr>
               ))}
             </tbody>
@@ -190,7 +248,7 @@ export function ScopeBuilder(props: {
 
       {shown && (
         <div className="panel">
-          <h2>{en.scope.totals}</h2>
+          <h2>{tradeName(division)}: {en.scope.totals}</h2>
           <dl>
             <div><dt>{en.scope.salePrice}</dt><dd>{money(shown.saleCents)}</dd></div>
             {showMargin && <div><dt>{en.scope.cost}</dt><dd>{money(shown.costCents)}</dd></div>}
@@ -203,14 +261,14 @@ export function ScopeBuilder(props: {
           {showMargin && <p className="muted small-text">{en.scope.marginNote}</p>}
         </div>
       )}
-      {!shown && !canEdit && saved[tier] && (
-        <div className="panel"><dl><div><dt>{en.scope.salePrice}</dt><dd>{money(saved[tier]!.saleCents)}</dd></div></dl></div>
+      {!shown && !canEdit && saved && (
+        <div className="panel"><dl><div><dt>{en.scope.salePrice}</dt><dd>{money(saved.saleCents)}</dd></div></dl></div>
       )}
 
       {canEdit && !locked && (
         <div className="row">
           <button onClick={save} disabled={status === "saving"}>{status === "saving" ? en.scope.saving : en.scope.save}</button>
-          {saved[tier] && selectedTier !== tier && (
+          {saved && selectedTier !== tier && (
             <button className="secondary" onClick={selectThis}>{en.contract.selectPackage}</button>
           )}
           {selectedTier === tier && <span className="badge">{en.contract.selected}</span>}

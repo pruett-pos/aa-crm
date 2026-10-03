@@ -173,6 +173,7 @@ CREATE TABLE products (               -- mirrored nightly from Pruett POS
 CREATE TABLE scopes (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id      uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  division    division NOT NULL,        -- the trade this estimate is for; one set of packages per trade
   tier        package_tier NOT NULL,
   title       text NOT NULL,           -- e.g. "Malarkey Highlander"
   sale_cents  bigint NOT NULL DEFAULT 0,
@@ -180,9 +181,10 @@ CREATE TABLE scopes (
   target_margin_bps integer NOT NULL DEFAULT 4000 CHECK (target_margin_bps BETWEEN 0 AND 9500),
   selected    boolean NOT NULL DEFAULT false,
   created_at  timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (job_id, tier)
+  UNIQUE (job_id, division, tier)
 );
-CREATE UNIQUE INDEX one_selected_scope ON scopes (job_id) WHERE selected;
+-- One chosen package per trade; the job's contract is the sum of the chosen packages.
+CREATE UNIQUE INDEX one_selected_scope_per_division ON scopes (job_id, division) WHERE selected;
 
 CREATE TABLE scope_items (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -17,9 +17,9 @@ const job = (over: Partial<JobAccess> = {}): JobAccess => ({
 
 test("computeScope: materials cost the Pruett Builder price, price comes from target margin", () => {
   const s = computeScope({
-    tier: "good", title: "Good", targetMarginBps: 4000,
+    division: "siding", tier: "good", title: "Good", targetMarginBps: 4000,
     items: [{ kind: "material", productId: "p1", quantity: 10 }],
-  }, catalog);
+  }, catalog, ["siding"]);
   assert.equal(s.items[0].unitCostCents, 11_880);   // 13,500 less 12%
   assert.equal(s.items[0].unitPriceCents, 19_800);  // 11,880 / 0.6
   assert.equal(s.costCents, 118_800);
@@ -29,34 +29,42 @@ test("computeScope: materials cost the Pruett Builder price, price comes from ta
 
 test("computeScope: labor line uses typed cost; margin lands at target", () => {
   const s = computeScope({
-    tier: "better", title: "Better", targetMarginBps: 3800,
+    division: "siding", tier: "better", title: "Better", targetMarginBps: 3800,
     items: [
       { kind: "material", productId: "p1", quantity: 20 },
       { kind: "labor", description: "Tear-off and install", quantity: 20, unitCostCents: 9_000 },
     ],
-  }, catalog);
+  }, catalog, ["siding"]);
   assert.equal(s.marginBps, 3800);
 });
 
 test("computeScope: client cannot supply a price or cost for a material", () => {
   const s = computeScope({
-    tier: "good", title: "Good", targetMarginBps: 4000,
+    division: "siding", tier: "good", title: "Good", targetMarginBps: 4000,
     items: [{ kind: "material", productId: "p1", quantity: 1, unitCostCents: 1, unitPriceCents: 1 } as never],
-  }, catalog);
+  }, catalog, ["siding"]);
   assert.equal(s.items[0].unitCostCents, 11_880);
   assert.equal(s.items[0].unitPriceCents, 19_800);
 });
 
 test("computeScope: rejects bad input", () => {
-  const base = { tier: "good" as const, title: "Good", targetMarginBps: 4000, items: [] };
-  assert.throws(() => computeScope({ ...base, title: "  " }, catalog), ScopeInputError);
-  assert.throws(() => computeScope({ ...base, targetMarginBps: 9600 }, catalog), ScopeInputError);
-  assert.throws(() => computeScope({ ...base, targetMarginBps: 40.5 }, catalog), ScopeInputError);
-  assert.throws(() => computeScope({ ...base, items: [{ kind: "material", productId: "nope", quantity: 1 }] }, catalog), ScopeInputError);
-  assert.throws(() => computeScope({ ...base, items: [{ kind: "material", productId: "p1", quantity: 0 }] }, catalog), ScopeInputError);
-  assert.throws(() => computeScope({ ...base, items: [{ kind: "labor", quantity: 1, unitCostCents: 100 }] }, catalog), ScopeInputError);
-  assert.throws(() => computeScope({ ...base, items: [{ kind: "labor", description: "x", quantity: 1 }] }, catalog), ScopeInputError);
-  assert.equal(computeScope(base, catalog).saleCents, 0); // empty scope is fine
+  const base = { division: "siding" as const, tier: "good" as const, title: "Good", targetMarginBps: 4000, items: [] };
+  assert.throws(() => computeScope({ ...base, title: "  " }, catalog, ["siding"]), ScopeInputError);
+  assert.throws(() => computeScope({ ...base, targetMarginBps: 9600 }, catalog, ["siding"]), ScopeInputError);
+  assert.throws(() => computeScope({ ...base, targetMarginBps: 40.5 }, catalog, ["siding"]), ScopeInputError);
+  assert.throws(() => computeScope({ ...base, items: [{ kind: "material", productId: "nope", quantity: 1 }] }, catalog, ["siding"]), ScopeInputError);
+  assert.throws(() => computeScope({ ...base, items: [{ kind: "material", productId: "p1", quantity: 0 }] }, catalog, ["siding"]), ScopeInputError);
+  assert.throws(() => computeScope({ ...base, items: [{ kind: "labor", quantity: 1, unitCostCents: 100 }] }, catalog, ["siding"]), ScopeInputError);
+  assert.throws(() => computeScope({ ...base, items: [{ kind: "labor", description: "x", quantity: 1 }] }, catalog, ["siding"]), ScopeInputError);
+  assert.equal(computeScope(base, catalog, ["siding"]).saleCents, 0); // empty scope is fine
+});
+
+test("computeScope: the trade must be on the job; the scope carries its trade", () => {
+  const input = { division: "roofing" as const, tier: "good" as const, title: "Good", targetMarginBps: 4000, items: [] };
+  assert.throws(() => computeScope(input, catalog, ["siding"]), ScopeInputError);                 // roofing is not on a siding-only job
+  const s = computeScope(input, catalog, ["siding", "roofing"]);
+  assert.equal(s.division, "roofing");
+  assert.equal(toView({ ...s, id: "s9", selected: true }, "admin", { isOwnJobEstimator: false, estimatorOwnTruck: false }).division, "roofing");
 });
 
 test("access: write is admin or the job's own estimator only", () => {
@@ -84,11 +92,11 @@ test("access: csr, crew leader, accounting, other estimators cannot read", () =>
 });
 
 const stored = () => ({
-  id: "s1",
+  id: "s1", selected: false,
   ...computeScope({
-    tier: "good", title: "Good", targetMarginBps: 3800,
+    division: "siding", tier: "good", title: "Good", targetMarginBps: 3800,
     items: [{ kind: "material", productId: "p1", quantity: 10 }],
-  }, catalog),
+  }, catalog, ["siding"]),
 });
 
 test("view: PM sees margin and cost but not commission", () => {

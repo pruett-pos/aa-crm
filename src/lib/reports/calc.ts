@@ -60,20 +60,32 @@ export function closeRate(facts: JobFact[], range: DateRange, by: "estimator" | 
 // ---------- Sales ----------
 export type SalesRow = { key: string; jobs: number; salesCents: number; averageCents: number };
 
-/** Contract totals of jobs whose contract was signed in the range. A multi-division job counts under its first division. */
+/**
+ * Contract totals of jobs whose contract was signed in the range. For sales by division, a multi-trade job is split
+ * across its trades using each trade's chosen package; older jobs with no per-trade packages count under their first division.
+ */
 export function sales(facts: JobFact[], range: DateRange, by: "division" | "estimator"): { rows: SalesRow[]; total: SalesRow } {
-  const keyOf = (f: JobFact) => (by === "division" ? primaryDivision(f) : f.estimatorId ?? UNASSIGNED);
   const won = facts.filter((f) => f.jobType !== "condition_report" && inRange(f.wonDate, range) && f.contractCents !== null);
-  const groups = new Map<string, JobFact[]>();
-  for (const f of won) groups.set(keyOf(f), [...(groups.get(keyOf(f)) ?? []), f]);
-  const summarize = (key: string, fs: JobFact[]): SalesRow => {
-    const total = fs.reduce((s, f) => s + (f.contractCents ?? 0), 0);
-    return { key, jobs: fs.length, salesCents: total, averageCents: fs.length ? Math.round(total / fs.length) : 0 };
+  // Each sale becomes one or more (key, jobId, cents) pieces; by division a multi-trade job is several pieces.
+  const pieces: { key: string; jobId: string; cents: number }[] = [];
+  for (const f of won) {
+    const split = by === "division" ? f.divisionSalesCents : undefined;
+    if (split && Object.keys(split).length > 0) {
+      for (const [division, cents] of Object.entries(split)) pieces.push({ key: division, jobId: f.jobId, cents });
+    } else {
+      pieces.push({ key: by === "division" ? primaryDivision(f) : f.estimatorId ?? UNASSIGNED, jobId: f.jobId, cents: f.contractCents ?? 0 });
+    }
+  }
+  const summarize = (key: string, ps: typeof pieces): SalesRow => {
+    const total = ps.reduce((s, p) => s + p.cents, 0);
+    const jobs = new Set(ps.map((p) => p.jobId)).size;
+    return { key, jobs, salesCents: total, averageCents: jobs ? Math.round(total / jobs) : 0 };
   };
-  const rows = [...groups].map(([k, fs]) => summarize(k, fs)).sort((a, b) => b.salesCents - a.salesCents || a.key.localeCompare(b.key));
-  return { rows, total: summarize("total", won) };
+  const groups = new Map<string, typeof pieces>();
+  for (const p of pieces) groups.set(p.key, [...(groups.get(p.key) ?? []), p]);
+  const rows = [...groups].map(([k, ps]) => summarize(k, ps)).sort((a, b) => b.salesCents - a.salesCents || a.key.localeCompare(b.key));
+  return { rows, total: summarize("total", pieces) };
 }
-
 // ---------- Cost per lead and per won job ----------
 export type CostRow = {
   source: string; leads: number; won: number; spendCents: number | null;

@@ -32,8 +32,8 @@ function makePng(w = 120, h = 40): Uint8Array {
 }
 const dataUrl = (png: Uint8Array) => `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
 
-const scope: StoredScope & { jobId: string; selected: boolean } = {
-  id: "s1", jobId: "j1", selected: false, tier: "good", title: "Good - Vinyl", targetMarginBps: 4000,
+const scope: StoredScope & { jobId: string } = {
+  id: "s1", jobId: "j1", selected: false, division: "siding", tier: "good", title: "Good - Vinyl", targetMarginBps: 4000,
   costCents: 366_528, saleCents: 610_880, marginBps: 4000,
   items: [{ kind: "material", sortOrder: 0, productId: "p1", description: "Vinyl siding", quantity: 24, unitCostCents: 8_272, unitPriceCents: 13_787, color: "Clay" }],
 };
@@ -50,7 +50,7 @@ function setup(job: Partial<ContractJob> = {}) {
 }
 async function ready(job: Partial<ContractJob> = {}) {
   const store = setup(job);
-  await selectPackage(store, "j1", "good", "est1", scope);
+  await selectPackage(store, "j1", "siding", "good", "est1", scope);
   const doc = await prepareContract(store, "j1");
   return { store, doc };
 }
@@ -62,7 +62,7 @@ const code = (p: Promise<unknown>) => p.then(() => "no error", (e: ContractError
 
 test("select: copies price and deposit to the job, moves stage up, logs history", async () => {
   const store = setup();
-  const sel = await selectPackage(store, "j1", "good", "est1", scope);
+  const sel = await selectPackage(store, "j1", "siding", "good", "est1", scope);
   assert.equal(sel.depositRequiredCents, 305_440);
   assert.equal(store.jobs[0].contractCents, 610_880);
   assert.equal(store.jobs[0].stage, "scope_presented");
@@ -72,14 +72,14 @@ test("select: copies price and deposit to the job, moves stage up, logs history"
 test("select: refused once a contract is signed", async () => {
   const { store, doc } = await ready();
   await finalizeSignature(store, input(doc.id));
-  assert.equal(await code(selectPackage(store, "j1", "good", "est1", scope)), "already_signed");
+  assert.equal(await code(selectPackage(store, "j1", "siding", "good", "est1", scope)), "already_signed");
 });
 
 test("prepare: needs a selection and a customer name", async () => {
   const noSel = setup();
   assert.equal(await code(prepareContract(noSel, "j1")), "no_selection");
   const store = setup({ customerName: "  " });
-  await selectPackage(store, "j1", "good", "est1", scope);
+  await selectPackage(store, "j1", "siding", "good", "est1", scope);
   assert.equal(await code(prepareContract(store, "j1")), "missing_customer");
   assert.equal(await code(prepareContract(store, "nope")), "not_found");
 });
@@ -164,7 +164,7 @@ test("sign: cancelled draft, unknown document and closed job are refused", async
 
 test("edit after select: clearing the selection cancels the draft contract", async () => {
   const { store, doc } = await ready();
-  await store.clearSelectionIfSelected("j1", "good");
+  await store.clearSelectionIfSelected("j1", "siding", "good");
   assert.equal((await store.getDocument(doc.id))?.status, "cancelled");
   assert.equal(store.jobs[0].contractCents, null);
   assert.equal(await code(prepareContract(store, "j1")), "no_selection");

@@ -1,6 +1,6 @@
-import type { Stage } from "../rules.ts";
+import type { Division, Stage } from "../rules.ts";
 import type { StoredScope, Tier } from "../scopes/types.ts";
-import type { Selection } from "./select.ts";
+import type { Combined } from "./select.ts";
 
 export type JobStageOrClosed = Stage | "lost" | "cancelled_after_approval";
 
@@ -46,12 +46,20 @@ export type SignatureRecord = {
 
 export interface ContractStore {
   getContractJob(jobId: string): Promise<ContractJob | null>;
-  getSelectedScope(jobId: string): Promise<StoredScope | null>;
+  /** The chosen package of each trade on the job. */
+  getSelectedScopes(jobId: string): Promise<StoredScope[]>;
   specialOrderProductIds(): Promise<Set<string>>;
-  /** Mark this tier selected (and others not), copy price/deposit to the job, cancel draft contracts, log stage change. */
-  applySelection(jobId: string, tier: Tier, selection: Selection, userId: string): Promise<void>;
-  /** If the tier is the selected one: unselect it, clear the job's contract figures and cancel draft contracts. */
-  clearSelectionIfSelected(jobId: string, tier: Tier): Promise<void>;
+  /**
+   * Choose this tier for one trade (unchoosing that trade's other tiers), recompute the job's contract, cost, special-order
+   * flag and deposit from every trade's chosen package, move the stage up, log it, and cancel any draft contract.
+   */
+  applySelection(jobId: string, division: Division, tier: Tier, userId: string): Promise<Combined>;
+  /** If this package is the chosen one for its trade: unchoose it, recompute the job's figures from what remains chosen, cancel draft contracts. */
+  clearSelectionIfSelected(jobId: string, division: Division, tier: Tier): Promise<void>;
+  /** Add a trade to the job. */
+  addDivision(jobId: string, division: Division): Promise<void>;
+  /** Remove a trade: deletes its unsigned estimates, recomputes the job's figures, cancels draft contracts. */
+  removeDivision(jobId: string, division: Division): Promise<void>;
   hasSignedContract(jobId: string): Promise<boolean>;
   getLiveContract(jobId: string): Promise<DocumentRecord | null>;
   getDocument(id: string): Promise<DocumentRecord | null>;

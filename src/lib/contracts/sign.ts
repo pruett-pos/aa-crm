@@ -1,13 +1,16 @@
 import { createHash } from "node:crypto";
-import { STAGES, type Stage } from "../rules.ts";
-import { selectScope } from "./select.ts";
+import { STAGES, type Division, type Stage } from "../rules.ts";
+import { en } from "../../i18n/en.ts";
+import { validateSelectable, type SelectableScope } from "./select.ts";
 import { renderContractPdf, renderSignedContractPdf, type ContractData } from "./pdf.ts";
 import type { ContractStore, DocumentRecord, JobStageOrClosed } from "./types.ts";
+import { DIVISIONS } from "../leads/types.ts";
 import type { Tier } from "../scopes/types.ts";
 
 export type ContractErrorCode =
   | "not_found" | "no_selection" | "missing_customer" | "job_closed" | "already_signed" | "not_draft"
-  | "consent_required" | "name_required" | "email_invalid" | "signature_invalid" | "tampered";
+  | "consent_required" | "name_required" | "email_invalid" | "signature_invalid" | "tampered"
+  | "divisions_incomplete" | "division_invalid" | "division_exists" | "division_not_on_job" | "last_division";
 
 export class ContractError extends Error {
   code: ContractErrorCode;
@@ -27,16 +30,46 @@ export function stageAfterSigning(current: JobStageOrClosed): Stage | null {
 }
 
 // ---------- Selecting a package ----------
-export async function selectPackage(store: ContractStore, jobId: string, tier: Tier, userId: string, scope: Parameters<typeof selectScope>[0]) {
+/**
+ * The customer picks a package for one trade. The job's contract, cost, special-order flag and deposit are then
+ * recomputed from every trade's chosen package (so the deposit rule applies to the combined total).
+ */
+export async function selectPackage(
+  store: ContractStore, jobId: string, division: Division, tier: Tier, userId: string, scope: SelectableScope,
+) {
   const job = await store.getContractJob(jobId);
   if (!job) throw new ContractError("not_found");
   if (await store.hasSignedContract(jobId)) throw new ContractError("already_signed", "A contract is already signed for this job");
-  const selection = selectScope(scope, await store.specialOrderProductIds(), job.stage);
-  await store.applySelection(jobId, tier, selection, userId);
-  return selection;
+  if (!job.divisions.includes(division)) throw new ContractError("division_not_on_job", "That trade isn't on this job");
+  validateSelectable(scope, job.stage);
+  return store.applySelection(jobId, division, tier, userId);
+}
+
+// ---------- Trades on a job ----------
+/** Add or remove a trade (division) before the contract is signed. At least one trade always remains. */
+export async function changeDivisions(
+  store: ContractStore, a: { jobId: string; action: "add" | "remove"; division: string },
+): Promise<string[]> {
+  if (!(DIVISIONS as readonly string[]).includes(a.division)) throw new ContractError("division_invalid");
+  const division = a.division as Division;
+  const job = await store.getContractJob(a.jobId);
+  if (!job) throw new ContractError("not_found");
+  if (job.stage === "lost" || job.stage === "cancelled_after_approval") throw new ContractError("job_closed");
+  if (await store.hasSignedContract(a.jobId)) throw new ContractError("already_signed", "A contract is already signed for this job");
+  if (a.action === "add") {
+    if (job.divisions.includes(division)) throw new ContractError("division_exists");
+    await store.addDivision(a.jobId, division);
+  } else {
+    if (!job.divisions.includes(division)) throw new ContractError("division_not_on_job");
+    if (job.divisions.length <= 1) throw new ContractError("last_division", "A job needs at least one trade");
+    await store.removeDivision(a.jobId, division);
+  }
+  return (await store.getContractJob(a.jobId))?.divisions ?? [];
 }
 
 // ---------- Preparing the contract ----------
+const labelFor = (d: string) => (en.leads.divisionNames as Record<string, string>)[d] ?? d;
+
 export async function prepareContract(
   store: ContractStore, jobId: string, now: () => Date = () => new Date(),
 ): Promise<DocumentRecord> {
@@ -44,22 +77,30 @@ export async function prepareContract(
   if (!job) throw new ContractError("not_found");
   if (job.stage === "lost" || job.stage === "cancelled_after_approval") throw new ContractError("job_closed");
   if (await store.hasSignedContract(jobId)) throw new ContractError("already_signed");
-  const scope = await store.getSelectedScope(jobId);
-  if (!scope || !job.contractCents) throw new ContractError("no_selection", "Select a package first");
   if (!job.customerName.trim()) throw new ContractError("missing_customer");
 
+  const chosen = new Map((await store.getSelectedScopes(jobId)).map((s) => [s.division as string, s]));
+  if (chosen.size === 0) throw new ContractError("no_selection", "Select a package first");
+  // Every trade on the job needs a chosen package, so nothing is sold without a price.
+  const missing = job.divisions.filter((d) => !chosen.has(d));
+  if (missing.length > 0) {
+    throw new ContractError("divisions_incomplete", `Choose a package for: ${missing.map(labelFor).join(", ")}`);
+  }
+
+  const sections = job.divisions.map((d) => {
+    const s = chosen.get(d)!;
+    return {
+      divisionLabel: labelFor(d), packageTitle: s.title, subtotalCents: s.saleCents,
+      items: s.items.map((i) => ({ description: i.description, quantity: i.quantity, unitPriceCents: i.unitPriceCents, color: i.color })),
+    };
+  });
   const data: ContractData = {
-    jobNumber: job.jobNumber, customerName: job.customerName, propertyAddress: job.propertyAddress,
-    packageTitle: scope.title,
-    items: scope.items.map((i) => ({
-      description: i.description, quantity: i.quantity, unitPriceCents: i.unitPriceCents, color: i.color,
-    })),
-    totalCents: scope.saleCents, depositCents: job.depositRequiredCents, issuedOn: now(),
+    jobNumber: job.jobNumber, customerName: job.customerName, propertyAddress: job.propertyAddress, sections,
+    totalCents: sections.reduce((sum, s) => sum + s.subtotalCents, 0), depositCents: job.depositRequiredCents, issuedOn: now(),
   };
   const bytes = await renderContractPdf(data);
   return store.createContractDocument(jobId, { bytes, sha256: sha256Hex(bytes), signerEmail: job.customerEmail });
 }
-
 // ---------- Signing ----------
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const PNG_MIN_BYTES = 1200;      // a blank canvas compresses to a few hundred bytes

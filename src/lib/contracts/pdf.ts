@@ -5,12 +5,20 @@ import { CONTRACT_TERMS_DRAFT } from "./terms.ts";
  * Everything the customer's copy may show. There is deliberately no cost, margin or
  * commission field here, so those can never leak into a contract.
  */
+export type ContractSection = {
+  /** The trade, e.g. "Roofing". */
+  divisionLabel: string;
+  packageTitle: string;
+  items: { description: string; quantity: number; unitPriceCents: number; color: string | null }[];
+  subtotalCents: number;
+};
+
 export type ContractData = {
   jobNumber: number;
   customerName: string;
   propertyAddress: string;
-  packageTitle: string;
-  items: { description: string; quantity: number; unitPriceCents: number; color: string | null }[];
+  /** One section per trade on the job, each with the package the customer chose for it. */
+  sections: ContractSection[];
   totalCents: number;
   depositCents: number;
   issuedOn: Date;
@@ -25,30 +33,44 @@ export function pdfSafe(s: string): string {
     .replace(/[^\x20-\x7E -ÿ]/g, "?");
 }
 
-/** Plain text of the contract, in reading order. Tested directly; the PDF just draws it. */
-export function contractText(d: ContractData): { heading: string; lines: string[] } {
+/**
+ * Plain text of the contract, in reading order. Tested directly; the PDF just draws it.
+ * `boldLines` are the indexes of lines drawn as headings (trade titles, subtotals, the grand total).
+ */
+export function contractText(d: ContractData): { heading: string; lines: string[]; boldLines: Set<number> } {
   const lines: string[] = [
     `Contract for job ${d.jobNumber}`,
     `Date: ${d.issuedOn.toISOString().slice(0, 10)}`,
     `Customer: ${d.customerName}`,
     `Property: ${d.propertyAddress}`,
-    `Selected package: ${d.packageTitle}`,
     "",
     "Scope of work",
-    ...d.items.map((i) => {
+  ];
+  const bold = new Set<number>([lines.length - 1]);
+  const multi = d.sections.length > 1;
+  for (const s of d.sections) {
+    bold.add(lines.length);
+    lines.push(`${s.divisionLabel}: ${s.packageTitle}`);
+    for (const i of s.items) {
       const total = Math.round(i.quantity * i.unitPriceCents);
       const color = i.color ? ` (${i.color})` : "";
-      return `${i.description}${color} - ${i.quantity} x ${money(i.unitPriceCents)} = ${money(total)}`;
-    }),
-    "",
-    `Total price: ${money(d.totalCents)}`,
+      lines.push(`${i.description}${color} - ${i.quantity} x ${money(i.unitPriceCents)} = ${money(total)}`);
+    }
+    if (multi) {
+      bold.add(lines.length);
+      lines.push(`${s.divisionLabel} subtotal: ${money(s.subtotalCents)}`);
+    }
+    lines.push("");
+  }
+  bold.add(lines.length);
+  lines.push(`Total price: ${money(d.totalCents)}`);
+  lines.push(
     d.depositCents > 0
       ? `Deposit due before materials are ordered: ${money(d.depositCents)}`
       : "No deposit is required before work begins.",
-    "",
-    ...CONTRACT_TERMS_DRAFT,
-  ];
-  return { heading: "A&A Exterior Group - Contract", lines };
+  );
+  lines.push("", ...CONTRACT_TERMS_DRAFT);
+  return { heading: "A&A Exterior Group - Contract", lines, boldLines: bold };
 }
 
 function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -88,7 +110,7 @@ export async function renderContractPdf(d: ContractData): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const { heading, lines } = contractText(d);
+  const { heading, lines, boldLines } = contractText(d);
 
   let page = pdf.addPage([W, H]);
   let y = H - M;
@@ -98,9 +120,8 @@ export async function renderContractPdf(d: ContractData): Promise<Uint8Array> {
 
   page.drawText(pdfSafe(heading), { x: M, y, size: 18, font: bold, color: NAVY });
   y -= 30;
-  for (const raw of lines) {
-    const isSection = raw === "Scope of work";
-    const f = isSection || raw.startsWith("Total price") ? bold : font;
+  for (const [index, raw] of lines.entries()) {
+    const f = boldLines.has(index) ? bold : font;
     for (const part of wrap(pdfSafe(raw), f, SIZE, W - 2 * M)) {
       ensure(LH);
       page.drawText(part, { x: M, y, size: SIZE, font: f, color: rgb(0.1, 0.1, 0.1) });

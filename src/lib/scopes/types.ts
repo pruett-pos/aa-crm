@@ -15,6 +15,7 @@ export type Product = {
 
 /** What the estimator sends. Prices are never accepted from the client. */
 export type ScopeInput = {
+  division: Division;          // the trade this estimate is for; must be one of the job's divisions
   tier: Tier;
   title: string;
   targetMarginBps: number;
@@ -41,6 +42,7 @@ export type ComputedItem = {
 };
 
 export type ComputedScope = {
+  division: Division;
   tier: Tier;
   title: string;
   targetMarginBps: number;
@@ -58,7 +60,7 @@ export type JobAccess = {
   productionManagerId: string | null;
 };
 
-export type StoredScope = ComputedScope & { id: string };
+export type StoredScope = ComputedScope & { id: string; selected: boolean };
 
 export type JobSummary = JobAccess & { jobNumber: number; jobType: "retail" | "insurance" | "condition_report" };
 
@@ -68,9 +70,11 @@ export interface ScopeStore {
   listJobs(): Promise<JobSummary[]>;
   /** User ids of Production Managers who manage any of these divisions. */
   divisionManagerIds(divisions: Division[]): Promise<string[]>;
+  /** Divisions a Production Manager manages (any market). */
+  divisionsManagedBy(userId: string): Promise<Division[]>;
   getEstimatorOwnTruck(userId: string): Promise<boolean>;
   listProducts(): Promise<Product[]>;
   listScopes(jobId: string): Promise<StoredScope[]>;
-  /** Replace the scope for (jobId, tier), creating it if needed. */
+  /** Replace the scope for (jobId, division, tier), creating it if needed. */
   saveScope(jobId: string, scope: ComputedScope): Promise<StoredScope>;
 }

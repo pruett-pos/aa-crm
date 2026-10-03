@@ -84,6 +84,30 @@ test("sales: a multi-division job counts fully under its first division; unassig
   assert.deepEqual(sales(facts, OCT, "estimator").rows.map((r) => [r.key, r.salesCents]), [["est1", 900_000], ["unassigned", 100_000]]);
 });
 
+test("sales by division: a multi-trade job is split across its trades by each trade's chosen package", () => {
+  const facts = [
+    won({ divisions: ["roofing", "siding"], contractCents: 1_000_000, divisionSalesCents: { roofing: 700_000, siding: 300_000 } }),
+    won({ divisions: ["siding"], contractCents: 400_000, divisionSalesCents: { siding: 400_000 } }),
+  ];
+  const { rows, total } = sales(facts, OCT, "division");
+  assert.deepEqual(rows, [
+    { key: "siding", jobs: 2, salesCents: 700_000, averageCents: 350_000 },   // 300k from the shared job + 400k
+    { key: "roofing", jobs: 1, salesCents: 700_000, averageCents: 700_000 },
+  ].sort((a, b) => b.salesCents - a.salesCents || a.key.localeCompare(b.key)));
+  assert.equal(total.salesCents, 1_400_000);   // the split never changes the total
+  assert.equal(total.jobs, 2);                  // and a shared job is still one job
+});
+
+test("sales by division: jobs with no per-trade packages fall back to the first division; by rep is unaffected", () => {
+  const legacy = won({ divisions: ["roofing", "gutters"], contractCents: 900_000 });
+  const multi = won({ divisions: ["roofing", "siding"], contractCents: 1_000_000, divisionSalesCents: { roofing: 600_000, siding: 400_000 }, estimatorId: "est2" });
+  const byDivision = sales([legacy, multi], OCT, "division");
+  assert.deepEqual(byDivision.rows.map((r) => [r.key, r.salesCents]), [["roofing", 1_500_000], ["siding", 400_000]]);
+  assert.equal(byDivision.total.salesCents, 1_900_000);
+  const byRep = sales([legacy, multi], OCT, "estimator");
+  assert.deepEqual(byRep.rows.map((r) => [r.key, r.salesCents]), [["est2", 1_000_000], ["est1", 900_000]]);   // whole job to its rep
+});
+
 test("sales: nothing sold is an empty list with a zero total", () => {
   const r = sales([], OCT, "division");
   assert.deepEqual([r.rows.length, r.total.salesCents, r.total.averageCents], [0, 0, 0]);

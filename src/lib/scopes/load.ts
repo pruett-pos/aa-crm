@@ -13,6 +13,8 @@ export type ScopePageData =
       canEdit: boolean;
       products: CatalogItem[];   // only sent to people who can edit (they may see cost)
       scopes: ScopeView[];
+      /** The trades on this job, in order. */
+      divisions: string[];
       viewerRole: AuthUser["role"];
       /** The estimator's own-truck flag, only for people who may see commission; otherwise null. */
       commissionOwnTruck: boolean | null;
@@ -27,7 +29,9 @@ export async function loadScopeData(store: ScopeStore, user: AuthUser, jobId: st
 
   const estimatorOwnTruck = job.estimatorId ? await store.getEstimatorOwnTruck(job.estimatorId) : false;
   const canEdit = canWriteScopes(user, job);
-  const [scopes, catalog, summary] = await Promise.all([
+  // A Production Manager only sees the trades they manage.
+  const pmDivisions = user.role === "production_manager" ? await store.divisionsManagedBy(user.id) : null;
+  const [allScopes, catalog, summary] = await Promise.all([
     store.listScopes(job.id),
     canEdit ? store.listProducts() : Promise.resolve([]),
     store.listJobs().then((js) => js.find((j) => j.id === job.id)),
@@ -44,7 +48,8 @@ export async function loadScopeData(store: ScopeStore, user: AuthUser, jobId: st
     products: catalog.map((p) => ({
       id: p.id, name: p.name, unit: p.unit, specialOrder: p.specialOrder, retailCents: p.retailCents,
     })),
-    scopes: scopes.map((s) => toView(s, user.role, {
+    divisions: pmDivisions ? job.divisions.filter((d) => pmDivisions.includes(d)) : job.divisions,
+    scopes: allScopes.filter((s) => !pmDivisions || pmDivisions.includes(s.division)).map((s) => toView(s, user.role, {
       isOwnJobEstimator: job.estimatorId === user.id, estimatorOwnTruck,
     })),
   };

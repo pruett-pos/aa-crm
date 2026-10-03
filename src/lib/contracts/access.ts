@@ -18,6 +18,7 @@ export async function authorizeJob(
 
 const STATUS: Record<string, number> = {
   not_found: 404, already_signed: 409, tampered: 409, not_draft: 409, job_closed: 409,
+  divisions_incomplete: 409, division_exists: 409, division_not_on_job: 404, last_division: 409,
 };
 
 export function contractErrorResponse(e: unknown): Response {

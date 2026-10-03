@@ -10,14 +10,18 @@ const monthDate = (m: string) => new Date(`${m}-01T00:00:00Z`);
 export function createPrismaReportStore(db: PrismaClient): ReportStore {
   return {
     async listJobFacts(): Promise<JobFact[]> {
-      const [jobs, history, payments] = await Promise.all([
+      const [jobs, history, payments, chosenScopes] = await Promise.all([
         db.job.findMany({ orderBy: { jobNumber: "asc" } }),
         db.jobStageHistory.findMany({
           where: { toStage: { in: ["contract_signed", "in_production", "invoiced"] } },
           select: { jobId: true, toStage: true, changedAt: true }, orderBy: { changedAt: "asc" },
         }),
         db.payment.findMany({ where: { voidedAt: null }, select: { jobId: true, amountCents: true, isDeposit: true } }),
+        db.scope.findMany({ where: { selected: true }, select: { jobId: true, division: true, saleCents: true } }),
       ]);
+      // Sales per trade: the chosen package of each trade on each job.
+      const byTrade = new Map<string, Record<string, number>>();
+      for (const s of chosenScopes) byTrade.set(s.jobId, { ...(byTrade.get(s.jobId) ?? {}), [s.division]: Number(s.saleCents) });
 
       // First time each job entered each stage (rows are oldest first).
       const first = new Map<string, string>();
@@ -41,6 +45,7 @@ export function createPrismaReportStore(db: PrismaClient): ReportStore {
           jobId: j.id, jobNumber: j.jobNumber, jobType: j.jobType, divisions: j.divisions as Division[], source: j.source,
           estimatorId: j.estimatorId, stage: j.stage, createdDate,
           contractCents: j.contractCents === null ? null : Number(j.contractCents),
+          divisionSalesCents: byTrade.get(j.id),
           wonDate: isWon ? first.get(`${j.id}|contract_signed`) ?? createdDate : null,
           inProductionDate: first.get(`${j.id}|in_production`) ?? null,
           installDate: j.installDate ? dateStr(j.installDate) : null,

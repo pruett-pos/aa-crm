@@ -32,7 +32,8 @@ export default async function ScopePage({ params }: { params: Promise<{ jobId: s
         commissionOwnTruck={data.commissionOwnTruck}
         products={data.products}
         initial={data.scopes}
-        selectedTier={contract?.selectedTier ?? null}
+        divisions={data.divisions}
+        chosen={Object.fromEntries((contract?.trades ?? []).map((t) => [t.division, t.selectedTier]))}
         locked={contract?.document?.status === "signed"}
       />
       {contract && <ContractPanel jobId={data.job.id} canEdit={data.canEdit} info={contract} />}

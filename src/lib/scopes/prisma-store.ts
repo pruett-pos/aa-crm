@@ -9,7 +9,7 @@ type DbItem = {
   quantity: { toString(): string }; unitCostCents: bigint; unitPriceCents: bigint; color: string | null;
 };
 type DbScope = {
-  id: string; tier: string; title: string; saleCents: bigint; costCents: bigint;
+  id: string; division: string; selected: boolean; tier: string; title: string; saleCents: bigint; costCents: bigint;
   targetMarginBps: number; items: DbItem[];
 };
 
@@ -17,7 +17,7 @@ export function toStored(s: DbScope): StoredScope {
   const saleCents = Number(s.saleCents);
   const costCents = Number(s.costCents);
   return {
-    id: s.id, tier: s.tier as Tier, title: s.title, targetMarginBps: s.targetMarginBps,
+    id: s.id, division: s.division as Division, selected: s.selected, tier: s.tier as Tier, title: s.title, targetMarginBps: s.targetMarginBps,
     saleCents, costCents,
     marginBps: saleCents > 0 ? Math.round(((saleCents - costCents) * 10000) / saleCents) : 0,
     items: [...s.items].sort((a, b) => a.sortOrder - b.sortOrder).map((i) => ({
@@ -53,6 +53,11 @@ export function createPrismaScopeStore(db: PrismaClient): ScopeStore {
       const rows = await db.divisionManager.findMany({ where: { division: { in: divisions } } });
       return rows.map((r) => r.userId);
     },
+    async divisionsManagedBy(userId) {
+      if (!/^[0-9a-f-]{36}$/i.test(userId)) return [];
+      const rows = await db.divisionManager.findMany({ where: { userId } });
+      return [...new Set(rows.map((r) => r.division as Division))];
+    },
     async getEstimatorOwnTruck(userId) {
       const u = await db.user.findUnique({ where: { id: userId } });
       return u?.ownTruck ?? false;
@@ -68,13 +73,14 @@ export function createPrismaScopeStore(db: PrismaClient): ScopeStore {
       const rows = await db.scope.findMany({ where: { jobId }, include: { items: true } });
       const order: Tier[] = ["good", "better", "best"];
       return rows.map(toStored).sort((a, b) => order.indexOf(a.tier) - order.indexOf(b.tier));
+      // (callers group by division; tiers are ordered good, better, best within each)
     },
     async saveScope(jobId, scope: ComputedScope) {
       const saved = await db.$transaction(async (tx) => {
         const row = await tx.scope.upsert({
-          where: { jobId_tier: { jobId, tier: scope.tier } },
+          where: { jobId_division_tier: { jobId, division: scope.division, tier: scope.tier } },
           create: {
-            jobId, tier: scope.tier, title: scope.title, targetMarginBps: scope.targetMarginBps,
+            jobId, division: scope.division, tier: scope.tier, title: scope.title, targetMarginBps: scope.targetMarginBps,
             saleCents: BigInt(scope.saleCents), costCents: BigInt(scope.costCents),
           },
           update: {

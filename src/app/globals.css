@@ -82,3 +82,4 @@ fieldset.divisions .check { font-weight: 400; }
   main { max-width: none; padding: 0; }
   .report { break-inside: avoid; }
 }
+.small-heading { font-size: 0.95rem; margin: 0.25rem 0; color: #5c5a54; font-weight: 600; }

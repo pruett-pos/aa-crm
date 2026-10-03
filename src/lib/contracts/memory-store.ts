@@ -1,12 +1,12 @@
-import { STAGES, type Stage } from "../rules.ts";
+import { STAGES, type Division, type Stage } from "../rules.ts";
 import type { StoredScope, Tier } from "../scopes/types.ts";
-import type { Selection } from "./select.ts";
+import { combineSelections, stageAfterSelection, type Combined } from "./select.ts";
 import type { ContractJob, ContractStore, DocumentRecord, JobStageOrClosed, SignatureRecord } from "./types.ts";
 
 /** In-memory store for tests. Not used by the app. */
 export class MemoryContractStore implements ContractStore {
   jobs: ContractJob[] = [];
-  scopes: (StoredScope & { jobId: string; selected: boolean })[] = [];
+  scopes: (StoredScope & { jobId: string })[] = [];
   specialOrder = new Set<string>();
   docs: DocumentRecord[] = [];
   signatures: SignatureRecord[] = [];
@@ -22,33 +22,61 @@ export class MemoryContractStore implements ContractStore {
   async getContractJob(jobId: string) {
     return this.jobs.find((j) => j.id === jobId) ?? null;
   }
-  async getSelectedScope(jobId: string) {
-    return this.scopes.find((s) => s.jobId === jobId && s.selected) ?? null;
+  async getSelectedScopes(jobId: string) {
+    return this.scopes.filter((s) => s.jobId === jobId && s.selected);
   }
   async specialOrderProductIds() {
     return this.specialOrder;
   }
-  async applySelection(jobId: string, tier: Tier, sel: Selection, userId: string) {
+  /** Recompute the job's contract figures from every trade's chosen package. */
+  private recompute(jobId: string): Combined | null {
     const j = this.job(jobId);
-    for (const s of this.scopes.filter((x) => x.jobId === jobId)) s.selected = s.tier === tier;
-    j.contractCents = sel.contractCents;
-    j.depositRequiredCents = sel.depositRequiredCents;
-    this.docs.filter((d) => d.jobId === jobId && d.status === "draft").forEach((d) => { d.status = "cancelled"; });
-    if (j.stage !== sel.stage) {
-      this.history.push({ jobId, from: j.stage, to: sel.stage, by: userId });
-      j.stage = sel.stage;
+    const chosen = this.scopes.filter((s) => s.jobId === jobId && s.selected);
+    if (chosen.length === 0) {
+      j.contractCents = null;
+      j.depositRequiredCents = 0;
+      return null;
     }
+    const c = combineSelections(chosen, this.specialOrder);
+    j.contractCents = c.contractCents;
+    j.depositRequiredCents = c.depositRequiredCents;
+    return c;
   }
-  async clearSelectionIfSelected(jobId: string, tier: Tier) {
-    const s = this.scopes.find((x) => x.jobId === jobId && x.tier === tier && x.selected);
+  private cancelDrafts(jobId: string) {
+    this.docs.filter((d) => d.jobId === jobId && d.status === "draft").forEach((d) => { d.status = "cancelled"; });
+  }
+  async applySelection(jobId: string, division: Division, tier: Tier, userId: string) {
+    const j = this.job(jobId);
+    const target = this.scopes.find((s) => s.jobId === jobId && s.division === division && s.tier === tier);
+    if (!target) throw new Error("Package has not been saved yet");
+    for (const s of this.scopes.filter((x) => x.jobId === jobId && x.division === division)) s.selected = s.tier === tier;
+    const combined = this.recompute(jobId)!;
+    this.cancelDrafts(jobId);
+    const next = stageAfterSelection(j.stage);
+    if (next !== j.stage && next !== "lost" && next !== "cancelled_after_approval") {
+      this.history.push({ jobId, from: j.stage, to: next, by: userId });
+      j.stage = next;
+    }
+    return combined;
+  }
+  async clearSelectionIfSelected(jobId: string, division: Division, tier: Tier) {
+    const s = this.scopes.find((x) => x.jobId === jobId && x.division === division && x.tier === tier && x.selected);
     if (!s) return;
     s.selected = false;
-    const j = this.job(jobId);
-    j.contractCents = null;
-    j.depositRequiredCents = 0;
-    this.docs.filter((d) => d.jobId === jobId && d.status === "draft").forEach((d) => { d.status = "cancelled"; });
+    this.recompute(jobId);
+    this.cancelDrafts(jobId);
   }
-  async hasSignedContract(jobId: string) {
+  async addDivision(jobId: string, division: Division) {
+    const j = this.job(jobId);
+    if (!j.divisions.includes(division)) j.divisions = [...j.divisions, division];
+  }
+  async removeDivision(jobId: string, division: Division) {
+    const j = this.job(jobId);
+    j.divisions = j.divisions.filter((d) => d !== division);
+    this.scopes = this.scopes.filter((s) => !(s.jobId === jobId && s.division === division));
+    this.recompute(jobId);
+    this.cancelDrafts(jobId);
+  }  async hasSignedContract(jobId: string) {
     return this.docs.some((d) => d.jobId === jobId && d.status === "signed");
   }
   async getLiveContract(jobId: string) {

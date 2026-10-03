@@ -319,6 +319,7 @@ model Product {
 model Scope {
   id              String      @id @default(uuid()) @db.Uuid
   jobId           String      @map("job_id") @db.Uuid
+  division        Division
   tier            PackageTier
   title           String
   saleCents       BigInt      @default(0) @map("sale_cents")
@@ -328,7 +329,7 @@ model Scope {
   job             Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
   items           ScopeItem[]
 
-  @@unique([jobId, tier])
+  @@unique([jobId, division, tier])
   @@map("scopes")
 }
 

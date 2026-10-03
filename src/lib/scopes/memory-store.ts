@@ -9,7 +9,7 @@ export class MemoryScopeStore implements ScopeStore {
   products: Product[] = [];
   managers: { division: Division; userId: string }[] = [];
   ownTruck = new Map<string, boolean>();
-  private scopes: (StoredScope & { jobId: string })[] = [];
+  scopes: (StoredScope & { jobId: string })[] = [];
   private seq = 0;
 
   async getJob(jobId: string) {
@@ -21,6 +21,9 @@ export class MemoryScopeStore implements ScopeStore {
   async divisionManagerIds(divisions: Division[]) {
     return this.managers.filter((m) => divisions.includes(m.division)).map((m) => m.userId);
   }
+  async divisionsManagedBy(userId: string) {
+    return this.managers.filter((m) => m.userId === userId).map((m) => m.division);
+  }
   async getEstimatorOwnTruck(userId: string) {
     return this.ownTruck.get(userId) ?? false;
   }
@@ -31,8 +34,8 @@ export class MemoryScopeStore implements ScopeStore {
     return this.scopes.filter((s) => s.jobId === jobId);
   }
   async saveScope(jobId: string, scope: ComputedScope) {
-    const existing = this.scopes.find((s) => s.jobId === jobId && s.tier === scope.tier);
-    const stored = { ...scope, id: existing?.id ?? `scope-${++this.seq}`, jobId };
+    const existing = this.scopes.find((s) => s.jobId === jobId && s.division === scope.division && s.tier === scope.tier);
+    const stored = { ...scope, id: existing?.id ?? `scope-${++this.seq}`, jobId, selected: existing?.selected ?? false };
     this.scopes = this.scopes.filter((s) => s !== existing).concat(stored);
     return stored;
   }

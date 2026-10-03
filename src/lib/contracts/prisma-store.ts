@@ -1,8 +1,8 @@
 import type { PrismaClient } from "../../generated/prisma/client.ts";
 import { toStored } from "../scopes/prisma-store.ts";
-import type { Stage } from "../rules.ts";
+import type { Division, Stage } from "../rules.ts";
 import type { Tier } from "../scopes/types.ts";
-import type { Selection } from "./select.ts";
+import { combineSelections, stageAfterSelection, type Combined } from "./select.ts";
 import type { ContractJob, ContractStore, DocumentRecord, JobStageOrClosed } from "./types.ts";
 
 type DbDoc = {
@@ -23,6 +23,37 @@ function toRecord(d: DbDoc): DocumentRecord {
 // Prisma wants plain ArrayBuffer-backed bytes.
 const bytes = (u: Uint8Array) => Buffer.from(u) as unknown as Uint8Array<ArrayBuffer>;
 
+type Tx = Pick<PrismaClient, "job" | "scope" | "product">;
+
+async function specialIds(c: Pick<PrismaClient, "product">): Promise<Set<string>> {
+  const rows = await c.product.findMany({ where: { specialOrder: true }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * Recompute the job's contract, cost, special-order flag and deposit from every trade's chosen package
+ * (the one place the combination happens; the rule itself lives in select.ts and rules.ts).
+ * With nothing chosen the job's contract figures are cleared.
+ */
+async function recompute(tx: Tx, jobId: string): Promise<Combined | null> {
+  const chosen = await tx.scope.findMany({ where: { jobId, selected: true }, include: { items: true } });
+  if (chosen.length === 0) {
+    await tx.job.update({
+      where: { id: jobId },
+      data: { contractCents: null, costCents: null, hasSpecialOrder: false, depositRequiredCents: BigInt(0) },
+    });
+    return null;
+  }
+  const combined = combineSelections(chosen.map(toStored), await specialIds(tx));
+  await tx.job.update({
+    where: { id: jobId },
+    data: {
+      contractCents: BigInt(combined.contractCents), costCents: BigInt(combined.costCents),
+      hasSpecialOrder: combined.hasSpecialOrder, depositRequiredCents: BigInt(combined.depositRequiredCents),
+    },
+  });
+  return combined;
+}
 export function createPrismaContractStore(db: PrismaClient): ContractStore {
   return {
     async getContractJob(jobId) {
@@ -43,49 +74,58 @@ export function createPrismaContractStore(db: PrismaClient): ContractStore {
       return job;
     },
 
-    async getSelectedScope(jobId) {
-      const s = await db.scope.findFirst({ where: { jobId, selected: true }, include: { items: true } });
-      return s ? toStored(s) : null;
+    async getSelectedScopes(jobId) {
+      const rows = await db.scope.findMany({ where: { jobId, selected: true }, include: { items: true } });
+      return rows.map(toStored);
     },
 
     async specialOrderProductIds() {
-      const rows = await db.product.findMany({ where: { specialOrder: true }, select: { id: true } });
-      return new Set(rows.map((r) => r.id));
+      return specialIds(db);
     },
 
-    async applySelection(jobId: string, tier: Tier, sel: Selection, userId: string) {
-      await db.$transaction(async (tx) => {
+    async applySelection(jobId: string, division: Division, tier: Tier, userId: string): Promise<Combined> {
+      return db.$transaction(async (tx) => {
         const job = await tx.job.findUniqueOrThrow({ where: { id: jobId } });
-        await tx.scope.updateMany({ where: { jobId }, data: { selected: false } });
-        const res = await tx.scope.updateMany({ where: { jobId, tier }, data: { selected: true } });
+        // Only this trade's choice changes; other trades keep theirs.
+        await tx.scope.updateMany({ where: { jobId, division }, data: { selected: false } });
+        const res = await tx.scope.updateMany({ where: { jobId, division, tier }, data: { selected: true } });
         if (res.count !== 1) throw new Error("Package has not been saved yet");
-        await tx.job.update({
-          where: { id: jobId },
-          data: {
-            contractCents: BigInt(sel.contractCents), costCents: BigInt(sel.costCents),
-            hasSpecialOrder: sel.hasSpecialOrder, depositRequiredCents: BigInt(sel.depositRequiredCents),
-            stage: sel.stage as Stage,
-          },
-        });
-        if (job.stage !== sel.stage) {
-          await tx.jobStageHistory.create({ data: { jobId, fromStage: job.stage, toStage: sel.stage, changedBy: userId } });
+        const combined = (await recompute(tx, jobId))!;
+        const next = stageAfterSelection(job.stage);
+        if (next !== job.stage && next !== "lost" && next !== "cancelled_after_approval") {
+          await tx.job.update({ where: { id: jobId }, data: { stage: next as Stage } });
+          await tx.jobStageHistory.create({ data: { jobId, fromStage: job.stage, toStage: next as Stage, changedBy: userId } });
         }
         await tx.document.updateMany({ where: { jobId, kind: "contract", status: "draft" }, data: { status: "cancelled" } });
+        return combined;
       });
     },
 
-    async clearSelectionIfSelected(jobId, tier) {
+    async clearSelectionIfSelected(jobId, division, tier) {
       await db.$transaction(async (tx) => {
-        const res = await tx.scope.updateMany({ where: { jobId, tier, selected: true }, data: { selected: false } });
+        const res = await tx.scope.updateMany({ where: { jobId, division, tier, selected: true }, data: { selected: false } });
         if (res.count === 0) return;
-        await tx.job.update({
-          where: { id: jobId },
-          data: { contractCents: null, costCents: null, hasSpecialOrder: false, depositRequiredCents: BigInt(0) },
-        });
+        await recompute(tx, jobId);
         await tx.document.updateMany({ where: { jobId, kind: "contract", status: "draft" }, data: { status: "cancelled" } });
       });
     },
 
+    async addDivision(jobId, division) {
+      await db.$transaction(async (tx) => {
+        const job = await tx.job.findUniqueOrThrow({ where: { id: jobId } });
+        if (!job.divisions.includes(division)) await tx.job.update({ where: { id: jobId }, data: { divisions: [...job.divisions, division] } });
+      });
+    },
+
+    async removeDivision(jobId, division) {
+      await db.$transaction(async (tx) => {
+        const job = await tx.job.findUniqueOrThrow({ where: { id: jobId } });
+        await tx.job.update({ where: { id: jobId }, data: { divisions: job.divisions.filter((d) => d !== division) } });
+        await tx.scope.deleteMany({ where: { jobId, division } }); // items go with them (cascade)
+        await recompute(tx, jobId);
+        await tx.document.updateMany({ where: { jobId, kind: "contract", status: "draft" }, data: { status: "cancelled" } });
+      });
+    },
     async hasSignedContract(jobId) {
       return (await db.document.count({ where: { jobId, kind: "contract", status: "signed" } })) > 0;
     },

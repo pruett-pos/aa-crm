@@ -1,6 +1,6 @@
 import {
   SCOPE_MAX_TARGET_MARGIN_BPS, pruettPriceCents, priceForTargetMarginCents,
-  scopeTotals, scopeCommissionRateBps, STAGES,
+  scopeTotals, scopeCommissionRateBps, STAGES, type Division,
 } from "../rules.ts";
 import { can, type Role } from "../auth/roles.ts";
 import type { AuthUser } from "../auth/store.ts";
@@ -19,8 +19,9 @@ const MAX_UNIT_COST_CENTS = 100_000_000; // $1M per unit is surely a typo
  * Validate the estimator's input and compute every price on the server.
  * Materials cost the Pruett Builder price; customer price comes from the target margin.
  */
-export function computeScope(input: ScopeInput, catalog: Product[]): ComputedScope {
+export function computeScope(input: ScopeInput, catalog: Product[], jobDivisions: readonly Division[]): ComputedScope {
   if (!(TIERS as readonly string[]).includes(input.tier)) throw new ScopeInputError("Unknown package tier");
+  if (!jobDivisions.includes(input.division)) throw new ScopeInputError("That trade isn't on this job");
   if (!input.title.trim()) throw new ScopeInputError("Title is required");
   if (
     !Number.isInteger(input.targetMarginBps) ||
@@ -61,7 +62,7 @@ export function computeScope(input: ScopeInput, catalog: Product[]): ComputedSco
 
   const totals = scopeTotals(items);
   return {
-    tier: input.tier, title: input.title.trim(), targetMarginBps: input.targetMarginBps,
+    division: input.division, tier: input.tier, title: input.title.trim(), targetMarginBps: input.targetMarginBps,
     items, ...totals,
   };
 }
@@ -90,6 +91,8 @@ export function canReadScopes(user: AuthUser, job: JobAccess, managerIds: string
 // ---------- Response shaping ----------
 export type ScopeView = {
   id: string;
+  division: Division;
+  selected: boolean;
   tier: ComputedScope["tier"];
   title: string;
   items: {
@@ -115,7 +118,7 @@ export function toView(
     (can(role, "seeOwnCommissions") && opts.isOwnJobEstimator) ||
     role === "admin";
   const view: ScopeView = {
-    id: scope.id, tier: scope.tier, title: scope.title, saleCents: scope.saleCents,
+    id: scope.id, division: scope.division, selected: scope.selected, tier: scope.tier, title: scope.title, saleCents: scope.saleCents,
     items: scope.items.map((i) => ({
       kind: i.kind, description: i.description, quantity: i.quantity,
       unitPriceCents: i.unitPriceCents, color: i.color, productId: i.productId,

@@ -13,7 +13,7 @@ type DbScope = {
   targetMarginBps: number; items: DbItem[];
 };
 
-function toStored(s: DbScope): StoredScope {
+export function toStored(s: DbScope): StoredScope {
   const saleCents = Number(s.saleCents);
   const costCents = Number(s.costCents);
   return {

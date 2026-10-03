@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { en } from "@/i18n/en.ts";
 import { can, type Role } from "@/lib/auth/roles.ts";
@@ -43,8 +44,11 @@ function toInput(d: Draft): { targetMarginBps: number; items: ScopeItemInput[] }
 export function ScopeBuilder(props: {
   jobId: string; canEdit: boolean; role: Role; products: CatalogItem[];
   initial: ScopeView[]; commissionOwnTruck: boolean | null;
+  selectedTier: Tier | null; locked: boolean;
 }) {
-  const { jobId, canEdit, role, products, commissionOwnTruck } = props;
+  const { jobId, canEdit, role, products, commissionOwnTruck, selectedTier, locked } = props;
+  const router = useRouter();
+  const [selectFailed, setSelectFailed] = useState(false);
   const showMargin = can(role, "seeScopeMargin");
   const [tier, setTier] = useState<Tier>("good");
   const [drafts, setDrafts] = useState<Record<Tier, Draft>>(() => {
@@ -89,6 +93,14 @@ export function ScopeBuilder(props: {
     const view = (await res.json()) as ScopeView;
     setSaved((s) => ({ ...s, [tier]: view }));
     setStatus("saved");
+    router.refresh(); // saving the selected package voids the selection and any unsigned contract
+  }
+
+  async function selectThis() {
+    setSelectFailed(false);
+    const res = await fetch(`/api/jobs/${jobId}/scopes/${tier}/select`, { method: "POST" });
+    if (!res.ok) return setSelectFailed(true);
+    router.refresh();
   }
 
   const shown = preview ?? (saved[tier] && showMargin ? {
@@ -103,7 +115,7 @@ export function ScopeBuilder(props: {
         {TIERS.map((t) => (
           <button key={t} role="tab" aria-selected={t === tier} className={t === tier ? "tab on" : "tab"}
             onClick={() => { setTier(t); setStatus("idle"); }}>
-            {en.scope.tiers[t]}
+            {en.scope.tiers[t]}{t === selectedTier && <span className="tick" title={en.contract.selected}> ✓</span>}
           </button>
         ))}
       </div>
@@ -195,13 +207,19 @@ export function ScopeBuilder(props: {
         <div className="panel"><dl><div><dt>{en.scope.salePrice}</dt><dd>{money(saved[tier]!.saleCents)}</dd></div></dl></div>
       )}
 
-      {canEdit && (
+      {canEdit && !locked && (
         <div className="row">
           <button onClick={save} disabled={status === "saving"}>{status === "saving" ? en.scope.saving : en.scope.save}</button>
+          {saved[tier] && selectedTier !== tier && (
+            <button className="secondary" onClick={selectThis}>{en.contract.selectPackage}</button>
+          )}
+          {selectedTier === tier && <span className="badge">{en.contract.selected}</span>}
           {status === "saved" && <span className="muted">{en.scope.saved}</span>}
           {status === "failed" && <span className="error">{en.scope.saveFailed}</span>}
+          {selectFailed && <span className="error">{en.contract.selectFailed}</span>}
         </div>
       )}
+      {canEdit && locked && <p className="muted">{en.contract.locked}</p>}
     </div>
   );
 }

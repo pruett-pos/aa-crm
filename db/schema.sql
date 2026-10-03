@@ -209,9 +209,33 @@ CREATE TABLE documents (
   job_id      uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   kind        text NOT NULL CHECK (kind IN ('contingency','contract','change_order','condition_report','hover','xactimate','other')),
   file_url    text NOT NULL,
-  esign_envelope_id text,
+  esign_envelope_id text,                     -- unused: signing is built into the CRM
+  signer_email text,
+  status      text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','signed','declined','cancelled')),
+  file_data   bytea,                          -- current PDF (signed once signed); file_url is our authenticated file route
+  unsigned_data bytea,                        -- the PDF the customer was shown, kept as signed
+  unsigned_sha256 text,
+  signed_sha256 text,
   signed_at   timestamptz,
   created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX documents_job_idx ON documents (job_id);
+-- At most one live contract per job.
+CREATE UNIQUE INDEX one_live_contract ON documents (job_id) WHERE kind = 'contract' AND status <> 'cancelled';
+
+-- One row per in-person signature, with the audit trail.
+CREATE TABLE contract_signatures (
+  document_id   uuid PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+  signer_name   text NOT NULL,
+  signer_email  text,
+  consent_at    timestamptz NOT NULL,
+  signed_at     timestamptz NOT NULL,
+  ip            text,
+  user_agent    text,
+  signature_png bytea NOT NULL,
+  signature_sha256 text NOT NULL,
+  signed_by_user_id uuid REFERENCES users(id),  -- the estimator who ran the session
+  method        text NOT NULL DEFAULT 'in_person' CHECK (method IN ('in_person'))
 );
 
 CREATE TABLE payments (

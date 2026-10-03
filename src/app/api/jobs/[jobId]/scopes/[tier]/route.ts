@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
 import { getScopeStore } from "@/lib/scopes/index.ts";
+import { getContractStore } from "@/lib/contracts/index.ts";
 import { ScopeInputError, canWriteScopes, computeScope, toView } from "@/lib/scopes/service.ts";
 import { TIERS } from "@/lib/scopes/types.ts";
 
@@ -39,9 +40,17 @@ export async function PUT(req: Request, { params }: Ctx) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "invalid_body" }, { status: 400 });
 
+  // Prices are locked once the customer has signed.
+  const contracts = getContractStore();
+  if (await contracts.hasSignedContract(job.id)) {
+    return Response.json({ error: "contract_signed", message: "This job has a signed contract" }, { status: 409 });
+  }
+
   try {
     const computed = computeScope({ ...parsed.data, tier: tier as (typeof TIERS)[number] }, await store.listProducts());
     const saved = await store.saveScope(job.id, computed);
+    // Editing the package the customer picked voids that selection and any unsigned contract.
+    await contracts.clearSelectionIfSelected(job.id, tier as (typeof TIERS)[number]);
     const estimatorOwnTruck = job.estimatorId ? await store.getEstimatorOwnTruck(job.estimatorId) : false;
     return Response.json(toView(saved, user.role, {
       isOwnJobEstimator: job.estimatorId === user.id, estimatorOwnTruck,

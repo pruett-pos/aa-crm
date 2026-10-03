@@ -65,7 +65,7 @@ Exit states: Lost (reason required), Cancelled after approval * (triggers cancel
   refreshed by a nightly sync from Pruett POS.
 - Each scope shows estimated material cost, labor cost, sale price, and gross
   margin % — margin is visible to estimator, Production Manager and admin, never on the customer PDF.
-- Customer picks a package → contract generated → e-signed (Dropbox Sign API; do not build e-signature in-house).
+- Customer picks a package -> contract generated -> signed in person on the estimator's tablet, inside the CRM (no outside e-signature vendor; decided 2026-10). The signed PDF is locked and carries a certificate page with the audit trail, and the customer is emailed a copy.
 
 ## 6. Insurance jobs
 
@@ -113,7 +113,7 @@ outstanding depreciation, AR aging, commissions owed.
 | DemandIQ | in (leads) | 1 |
 | QuickBooks Online | out (customers, invoices, payments) | 1 |
 | Pruett POS | in (nightly prices); out (POs) later | 1 |
-| E-signature | out/in | 1 |
+| E-signature | built into the CRM (no vendor) | 1 |
 | Hover | in (measurements) | 2 |
 | CompanyCam | link | 2 |
 | Leap | one-time import of contacts, jobs, documents | 2 |
@@ -141,7 +141,7 @@ outstanding depreciation, AR aging, commissions owed.
      Open detail: if an upgrade replaces a covered line item, include only the
      customer-paid difference.
   4. Production Managers can see margin (updates the Scopes rule in section 5 and the roles table).
-  5. E-signature vendor = Dropbox Sign. Build under `src/integrations/dropbox-sign/`.
+  5. E-signature: NO outside vendor. Signing is built into the CRM (see slice 3 below). Dropbox Sign and DocuSign were dropped.
 - 2026-10 (slice 2, scope builder):
   - Customer price is set by a per-scope target margin (default 40%, max 95%):
     price = cost / (1 - target), rounded per line. Actual margin is always displayed.
@@ -154,3 +154,9 @@ outstanding depreciation, AR aging, commissions owed.
     only to admin and the job's own estimator.
   - Decided by AL: a Production Manager is matched to jobs by division only, with no market
     limit. `division_managers` rows for the job's divisions in any market grant access.
+- 2026-10 (slice 3, contracts and signing):
+  - AL reversed the earlier "do not build e-signature in-house" rule: customers sign in person on the estimator's tablet inside the CRM.
+  - Evidence kept per signature: signer name and email, consent time, signed time (UTC), IP, device, the estimator who ran the session, SHA-256 of the original PDF, the signature image and the signed PDF. The signed PDF is the original pages plus a certificate page, and cannot be signed or changed again.
+  - Choosing a package copies the price and deposit onto the job (deposit rule in `rules.ts`) and moves the job up to scope_presented. Editing the selected package voids the selection and any unsigned contract. A signed contract locks prices.
+  - Contract terms and the consent text are DRAFT placeholders. They need review by an attorney before real customers sign.
+  - Not yet handled: the FTC 3-day right-to-cancel notice for in-home sales, Missouri home-improvement and insurance-claim rules, and remote (emailed link) signing.

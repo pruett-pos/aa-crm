@@ -3,9 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/index.ts";
 import { getScopeStore } from "@/lib/scopes/index.ts";
 import { loadScopeData } from "@/lib/scopes/load.ts";
+import { getContractStore } from "@/lib/contracts/index.ts";
+import { loadContractInfo } from "@/lib/contracts/load.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
 import { en } from "@/i18n/en.ts";
 import { ScopeBuilder } from "./scope-builder.tsx";
+import { ContractPanel } from "./contract-panel.tsx";
 
 export default async function ScopePage({ params }: { params: Promise<{ jobId: string }> }) {
   const user = await getCurrentUser();
@@ -16,6 +19,7 @@ export default async function ScopePage({ params }: { params: Promise<{ jobId: s
   const data = await loadScopeData(getScopeStore(), user, jobId);
   if (data.status === "not_found") notFound();
   if (data.status === "forbidden") redirect("/jobs");
+  const contract = await loadContractInfo(getContractStore(), jobId);
 
   return (
     <>
@@ -28,7 +32,10 @@ export default async function ScopePage({ params }: { params: Promise<{ jobId: s
         commissionOwnTruck={data.commissionOwnTruck}
         products={data.products}
         initial={data.scopes}
+        selectedTier={contract?.selectedTier ?? null}
+        locked={contract?.document?.status === "signed"}
       />
+      {contract && <ContractPanel jobId={data.job.id} canEdit={data.canEdit} info={contract} />}
     </>
   );
 }

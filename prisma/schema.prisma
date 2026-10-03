@@ -128,9 +128,103 @@ model Job {
   stage               JobStage
   estimatorId         String?    @map("estimator_id") @db.Uuid
   productionManagerId String?    @map("production_manager_id") @db.Uuid
+  propertyId          String     @map("property_id") @db.Uuid
+  contractCents       BigInt?    @map("contract_cents")
+  costCents           BigInt?    @map("cost_cents")
+  hasSpecialOrder     Boolean    @default(false) @map("has_special_order")
+  depositRequiredCents BigInt    @default(0) @map("deposit_required_cents")
+  updatedAt           DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  property            Property   @relation(fields: [propertyId], references: [id])
   scopes              Scope[]
+  documents           Document[]
+  stageHistory        JobStageHistory[]
 
   @@map("jobs")
+}
+
+model Customer {
+  id         String     @id @default(uuid()) @db.Uuid
+  firstName  String     @map("first_name")
+  lastName   String     @map("last_name")
+  phone      String?
+  email      String?
+  properties Property[]
+
+  @@map("customers")
+}
+
+model Property {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  street     String
+  city       String
+  state      String   @default("MO")
+  zip        String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  jobs       Job[]
+
+  @@map("properties")
+}
+
+model Document {
+  id               String    @id @default(uuid()) @db.Uuid
+  jobId            String    @map("job_id") @db.Uuid
+  kind             String
+  fileUrl          String    @map("file_url")
+  signerEmail      String?   @map("signer_email")
+  status           String    @default("draft")
+  fileData         Bytes?    @map("file_data")
+  unsignedData     Bytes?    @map("unsigned_data")
+  unsignedSha256   String?   @map("unsigned_sha256")
+  signedSha256     String?   @map("signed_sha256")
+  signedAt         DateTime? @map("signed_at") @db.Timestamptz()
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  job              Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  signature        ContractSignature?
+
+  @@index([jobId])
+  @@map("documents")
+}
+
+model ContractSignature {
+  documentId      String   @id @map("document_id") @db.Uuid
+  signerName      String   @map("signer_name")
+  signerEmail     String?  @map("signer_email")
+  consentAt       DateTime @map("consent_at") @db.Timestamptz()
+  signedAt        DateTime @map("signed_at") @db.Timestamptz()
+  ip              String?
+  userAgent       String?  @map("user_agent")
+  signaturePng    Bytes    @map("signature_png")
+  signatureSha256 String   @map("signature_sha256")
+  signedByUserId  String?  @map("signed_by_user_id") @db.Uuid
+  method          String   @default("in_person")
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("contract_signatures")
+}
+
+model JobStageHistory {
+  id        BigInt    @id @default(autoincrement())
+  jobId     String    @map("job_id") @db.Uuid
+  fromStage JobStage? @map("from_stage")
+  toStage   JobStage  @map("to_stage")
+  changedBy String?   @map("changed_by") @db.Uuid
+  changedAt DateTime  @default(now()) @map("changed_at") @db.Timestamptz()
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_stage_history")
+}
+
+model IntegrationEvent {
+  id        BigInt   @id @default(autoincrement())
+  system    String
+  direction String
+  status    String
+  payload   Json?
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("integration_events")
 }
 
 model DivisionManager {

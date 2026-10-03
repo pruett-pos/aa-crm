@@ -55,3 +55,12 @@ button.small { padding: 0.25rem 0.625rem; font-size: 0.875rem; }
 .warn { color: #9b1c1c; }
 .small-text { font-size: 0.8125rem; }
 select { width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #b9b4a8; border-radius: 6px; background: #fff; font-size: 1rem; }
+
+.btn-link { display: inline-block; padding: 0.625rem 1rem; background: var(--navy); color: #fff; border-radius: 6px; font-weight: 600; text-decoration: none; }
+.sigpad { border: 2px dashed #b9b4a8; border-radius: 6px; background: #fff; touch-action: none; width: 100%; height: 220px; display: block; }
+.pdf-frame { width: 100%; height: 420px; border: 1px solid #d9d4c7; border-radius: 6px; background: #fff; }
+.consent { background: #fff; border: 1px solid #d9d4c7; border-radius: 6px; padding: 0.75rem 1rem; margin: 1rem 0; }
+.check { display: flex; gap: 0.5rem; align-items: center; font-weight: 600; }
+.check input { width: auto; }
+.tab .tick { color: var(--brass); font-weight: 700; }
+.tab.on .tick { color: #fff; }

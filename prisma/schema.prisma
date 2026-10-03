@@ -112,6 +112,28 @@ enum PackageTier {
 }
 
 // Read-only slice of jobs: only the columns scope access checks need.
+enum LeadSource {
+  phone
+  demandiq
+  website
+  google_scheduling
+  facebook
+  referral
+  canvassing
+  other
+
+  @@map("lead_source")
+}
+
+model MarketingSpend {
+  source     LeadSource
+  month      DateTime @db.Date
+  spendCents BigInt   @map("spend_cents")
+
+  @@id([source, month])
+  @@map("marketing_spend")
+}
+
 enum JobType {
   retail
   insurance
@@ -129,6 +151,12 @@ model Job {
   estimatorId         String?    @map("estimator_id") @db.Uuid
   productionManagerId String?    @map("production_manager_id") @db.Uuid
   propertyId          String     @map("property_id") @db.Uuid
+  source              LeadSource
+  onlineQuote         Boolean    @default(false) @map("online_quote")
+  needsReview         Boolean    @default(false) @map("needs_review")
+  createdBy           String?    @map("created_by") @db.Uuid
+  appointmentAt       DateTime?  @map("appointment_at") @db.Timestamptz()
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz()
   contractCents       BigInt?    @map("contract_cents")
   costCents           BigInt?    @map("cost_cents")
   hasSpecialOrder     Boolean    @default(false) @map("has_special_order")
@@ -149,6 +177,9 @@ model Customer {
   lastName   String     @map("last_name")
   phone      String?
   email      String?
+  phoneDigits     String?  @map("phone_digits")
+  lastEstimatorId String?  @map("last_estimator_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
   properties Property[]
 
   @@map("customers")
@@ -161,6 +192,7 @@ model Property {
   city       String
   state      String   @default("MO")
   zip        String
+  market     Market
   customer   Customer @relation(fields: [customerId], references: [id])
   jobs       Job[]
 

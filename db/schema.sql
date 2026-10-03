@@ -63,11 +63,13 @@ CREATE TABLE customers (
   phone         text,
   email         text,
   last_estimator_id uuid REFERENCES users(id),     -- drives call routing
+  phone_digits  text,                              -- 10 digits, for search and de-duplication
   qbo_customer_id   text,
   leap_id       text,                              -- for migration traceability
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX customers_phone_idx ON customers (phone);
+CREATE INDEX customers_phone_digits_idx ON customers (phone_digits);
 
 CREATE TABLE properties (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,6 +101,8 @@ CREATE TABLE jobs (
   stage         job_stage NOT NULL DEFAULT 'new_lead',
   source        lead_source NOT NULL,
   online_quote  boolean NOT NULL DEFAULT false,   -- came via DemandIQ instant quote
+  needs_review  boolean NOT NULL DEFAULT false,   -- online lead waiting for a CSR to confirm market and routing
+  created_by    uuid REFERENCES users(id),
   estimator_id  uuid REFERENCES users(id),
   production_manager_id uuid REFERENCES users(id),
   crew_leader_id uuid REFERENCES users(id),

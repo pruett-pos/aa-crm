@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIE = "aa_session";
-const PUBLIC_PREFIXES = ["/login", "/api/auth/"];
+// /api/leads/website is called by the website's form handler. It has its own secret-header check.
+const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/leads/website"];
 
 // Cheap gate: no session cookie means no access. The cookie is only checked for
 // presence here; routes and pages validate it against the database.

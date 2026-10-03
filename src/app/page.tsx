@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/index.ts";
 import { can, hasRole } from "@/lib/auth/roles.ts";
+import { canTakeLeads } from "@/lib/leads/logic.ts";
 import { en } from "@/i18n/en.ts";
 import { SignOutButton } from "./sign-out-button.tsx";
 
@@ -11,7 +12,6 @@ export default async function HomePage() {
 
   // Placeholder links by capability; real pages arrive in later slices.
   const areas = [
-    can(user.role, "createLeads") && "Leads",
     can(user.role, "buildScopes") && "Scopes of work",
     can(user.role, "viewAllJobs") && "All jobs",
     can(user.role, "scheduleCrews") && "Production schedule",
@@ -25,6 +25,14 @@ export default async function HomePage() {
       <p>
         {en.home.roleLabel}: <span className="badge">{en.roles[user.role]}</span>
       </p>
+      {canTakeLeads(user.role) && (
+        <ul>
+          <li><Link href="/leads/new">{en.leads.navNew}</Link></li>
+          <li><Link href="/leads">{en.leads.navList}</Link></li>
+          <li><Link href="/leads/review">{en.leads.navReview}</Link></li>
+          {user.role === "admin" && <li><Link href="/settings/marketing">{en.leads.navMarketing}</Link></li>}
+        </ul>
+      )}
       {hasRole(user.role, ["admin", "estimator", "production_manager", "accounting"]) && (
         <p><Link href="/jobs">{en.jobs.navLabel}</Link></p>
       )}

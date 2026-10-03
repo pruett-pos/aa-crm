@@ -72,3 +72,13 @@ tr.voided td:last-child { text-decoration: none; }
 fieldset.divisions { border: 1px solid #d9d4c7; border-radius: 6px; margin: 0.75rem 0; padding: 0.5rem 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
 fieldset.divisions legend { font-weight: 600; padding: 0 0.25rem; }
 fieldset.divisions .check { font-weight: 400; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.report { margin-top: 1.5rem; }
+.report-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.report-table tfoot td { border-top: 2px solid var(--navy); }
+@media print {
+  .noprint, form.noprint, p.noprint { display: none !important; }
+  body { background: #fff; }
+  main { max-width: none; padding: 0; }
+  .report { break-inside: avoid; }
+}

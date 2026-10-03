@@ -156,6 +156,7 @@ model Job {
   needsReview         Boolean    @default(false) @map("needs_review")
   createdBy           String?    @map("created_by") @db.Uuid
   appointmentAt       DateTime?  @map("appointment_at") @db.Timestamptz()
+  installDate         DateTime?  @map("install_date") @db.Date
   createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz()
   contractCents       BigInt?    @map("contract_cents")
   costCents           BigInt?    @map("cost_cents")
@@ -422,4 +423,14 @@ model CommissionEntry {
 
   @@index([estimatorId, entryDate])
   @@map("commission_payouts")
+}
+// Read-only slice of insurance_claims for the depreciation report (claim tracking itself comes in its own slice).
+model InsuranceClaim {
+  jobId                  String    @id @map("job_id") @db.Uuid
+  carrier                String?
+  claimNumber            String?   @map("claim_number")
+  depreciationCents      BigInt?   @map("depreciation_cents")
+  depreciationReceivedAt DateTime? @map("depreciation_received_at") @db.Timestamptz()
+
+  @@map("insurance_claims")
 }

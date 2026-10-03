@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/index.ts";
 import { can, hasRole } from "@/lib/auth/roles.ts";
 import { canTakeLeads } from "@/lib/leads/logic.ts";
 import { canManagePayouts } from "@/lib/commission/logic.ts";
+import { reportsFor } from "@/lib/reports/access.ts";
 import { en } from "@/i18n/en.ts";
 import { SignOutButton } from "./sign-out-button.tsx";
 
@@ -26,6 +27,7 @@ export default async function HomePage() {
       <p>
         {en.home.roleLabel}: <span className="badge">{en.roles[user.role]}</span>
       </p>
+      {reportsFor(user.role).length > 0 && <p><Link href="/reports">{en.reports.navLabel}</Link></p>}
       {canTakeLeads(user.role) && (
         <ul>
           <li><Link href="/leads/new">{en.leads.navNew}</Link></li>

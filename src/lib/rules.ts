@@ -68,6 +68,19 @@ export function scopeCommissionRateBps(totals: ScopeTotals, ownTruck: boolean): 
   return commissionRateBps(totals.marginBps, ownTruck);
 }
 
+// ---------- Reporting ----------
+/** A rate in basis points (e.g. close rate): part / whole, rounded. Zero when there is nothing to divide by. */
+export function rateBps(part: number, whole: number): number {
+  if (whole <= 0) return 0;
+  return Math.round((part * 10000) / whole);
+}
+
+/** Spend divided by a count (cost per lead, cost per won job), in whole cents. Null when the count is zero. */
+export function costPerCents(spendCents: number, count: number): number | null {
+  if (count <= 0) return null;
+  return Math.round(spendCents / count);
+}
+
 // ---------- Commission payouts and draws ----------
 /**
  * What to pay for a period: everything unpaid and earned, minus draws already advanced.

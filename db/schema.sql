@@ -111,6 +111,14 @@ CREATE TABLE jobs (
   materials_ordered_at timestamptz,                -- when the materials order was recorded
   materials_ordered_by uuid REFERENCES users(id),
   po_reference   text,                             -- purchase order number (entered by hand until the Pruett link exists)
+  -- CompanyCam link. Photos stay in CompanyCam; the CRM stores only which project belongs to the job.
+  companycam_project_id  text,
+  companycam_project_url text,
+  companycam_status      text NOT NULL DEFAULT 'none' CHECK (companycam_status IN ('none','pending','linked','error')),
+  companycam_link_method text CHECK (companycam_link_method IN ('created','auto_match','manual')),
+  companycam_attempts    integer NOT NULL DEFAULT 0,
+  companycam_next_attempt_at timestamptz,        -- retry time after an error, or the lease while a sync is running
+  companycam_error       text,
   lost_reason    text,
   contract_cents bigint,                          -- set at contract_signed
   cost_cents     bigint,                          -- est. materials + labor
@@ -124,6 +132,8 @@ CREATE TABLE jobs (
 );
 CREATE INDEX jobs_stage_idx ON jobs (stage);
 CREATE INDEX jobs_estimator_idx ON jobs (estimator_id);
+-- A CompanyCam project can belong to only one job.
+CREATE UNIQUE INDEX jobs_companycam_project_idx ON jobs (companycam_project_id) WHERE companycam_project_id IS NOT NULL;
 
 CREATE TABLE job_stage_history (
   id         bigserial PRIMARY KEY,

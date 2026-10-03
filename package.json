@@ -10,6 +10,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
+    "companycam:sync": "node --env-file=.env --experimental-strip-types scripts/companycam-sync.ts",
     "commission:backfill": "node --env-file=.env --experimental-strip-types scripts/backfill-commission.ts"
   },
   "engines": {

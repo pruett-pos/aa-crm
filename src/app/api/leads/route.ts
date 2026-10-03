@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
 import { allow } from "@/lib/auth/rate-limit.ts";
+import { ensureProjectBestEffort } from "@/lib/companycam/index.ts";
 import { getLeadStore } from "@/lib/leads/index.ts";
 import { createLead } from "@/lib/leads/logic.ts";
 import { leadErrorResponse } from "@/lib/leads/http.ts";
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
       actorId: check.user.id, customer: b.customer, property: b.property, market: b.market, jobType: b.jobType,
       divisions: b.divisions, source: b.source, appointmentAt, overrideEstimatorId: b.overrideEstimatorId ?? null,
     });
+    ensureProjectBestEffort(r.jobId);   // never blocks or fails the lead
     return Response.json(r, { status: 201 });
   } catch (e) {
     return leadErrorResponse(e);

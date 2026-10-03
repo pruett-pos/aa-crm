@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
+import { ensureProjectBestEffort } from "@/lib/companycam/index.ts";
 import { getLeadStore } from "@/lib/leads/index.ts";
 import { confirmLead } from "@/lib/leads/logic.ts";
 import { leadErrorResponse } from "@/lib/leads/http.ts";
@@ -21,6 +22,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { jobId } = await params;
   try {
     const r = await confirmLead(getLeadStore(), { jobId, ...parsed.data });
+    ensureProjectBestEffort(jobId);   // website leads get their project only once a CSR has confirmed them
     return Response.json(r);
   } catch (e) {
     return leadErrorResponse(e);

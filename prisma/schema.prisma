@@ -160,6 +160,13 @@ model Job {
   materialsOrderedAt  DateTime?  @map("materials_ordered_at") @db.Timestamptz()
   materialsOrderedBy  String?    @map("materials_ordered_by") @db.Uuid
   poReference         String?    @map("po_reference")
+  companycamProjectId     String?  @unique @map("companycam_project_id")
+  companycamProjectUrl    String?  @map("companycam_project_url")
+  companycamStatus        String   @default("none") @map("companycam_status")
+  companycamLinkMethod    String?  @map("companycam_link_method")
+  companycamAttempts      Int      @default(0) @map("companycam_attempts")
+  companycamNextAttemptAt DateTime? @map("companycam_next_attempt_at") @db.Timestamptz()
+  companycamError         String?  @map("companycam_error")
   createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz()
   contractCents       BigInt?    @map("contract_cents")
   costCents           BigInt?    @map("cost_cents")

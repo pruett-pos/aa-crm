@@ -152,5 +152,5 @@ outstanding depreciation, AR aging, commissions owed.
   - Scope access: admin and the job's own estimator can edit. A Production Manager can read
     (with margin) their division's jobs from `contract_signed` onward. Commission preview shows
     only to admin and the job's own estimator.
-  - ASSUMPTION to confirm: PM-to-division matching uses `division_managers` for the job's
-    divisions in any market (seed data has the siding PM in west_plains and the siding job in springfield).
+  - Decided by AL: a Production Manager is matched to jobs by division only, with no market
+    limit. `division_managers` rows for the job's divisions in any market grant access.

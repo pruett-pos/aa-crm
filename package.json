@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "commission:backfill": "node --env-file=.env --experimental-strip-types scripts/backfill-commission.ts"
   },
   "engines": {
     "node": ">=22.18"

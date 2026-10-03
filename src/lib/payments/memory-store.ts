@@ -1,4 +1,5 @@
 import type { Stage } from "../rules.ts";
+import type { NewEntry } from "../commission/types.ts";
 import type {
   JobStageOrClosed, NewPayment, PaymentJob, PaymentRecord, PaymentStore, PaymentTx,
 } from "./types.ts";
@@ -8,6 +9,7 @@ export class MemoryPaymentStore implements PaymentStore {
   jobs: PaymentJob[] = [];
   rows: (PaymentRecord & { photo: { data: Uint8Array; mime: string } | null; voidedBy: string | null })[] = [];
   history: { jobId: string; from: JobStageOrClosed; to: Stage; by: string }[] = [];
+  commission: NewEntry[] = [];
   private seq = 0;
 
   async getPaymentJob(jobId: string) {
@@ -51,6 +53,12 @@ export class MemoryPaymentStore implements PaymentStore {
         if (!r || r.voidedAt) return false;
         r.voidedAt = at; r.voidReason = reason; r.voidedBy = userId;
         return true;
+      },
+      async insertCommission(e) { self.commission.push(e); },
+      async reverseCommission(paymentId, entryDate) {
+        const earned = self.commission.find((c) => c.paymentId === paymentId && c.kind === "earned");
+        if (!earned || self.commission.some((c) => c.paymentId === paymentId && c.kind === "reversal")) return;
+        self.commission.push({ ...earned, kind: "reversal", amountCents: -earned.amountCents, entryDate, note: null });
       },
     };
     return fn(tx);

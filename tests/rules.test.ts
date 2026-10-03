@@ -5,7 +5,7 @@ import {
   contingencyFeeCents, cancellationFeeCents, depositRequiredCents,
   pruettPriceCents, routeCall, stagesFor, nextStage,
   priceForTargetMarginCents, scopeTotals, scopeCommissionRateBps,
-  depositDueCents, balanceDueCents, wouldOverpay, parseDollarsToCents,
+  depositDueCents, balanceDueCents, wouldOverpay, parseDollarsToCents, netPayout, allocateDraws,
 } from "../src/lib/rules.ts";
 
 test("gross margin", () => {
@@ -120,6 +120,26 @@ test("payments: commission earned on amount collected, not sold", () => {
   assert.equal(commissionEarnedCents(522_000, 4000, true), 52_200);   // own truck: 10%
   assert.equal(commissionEarnedCents(522_000, 3800, false), 36_540);  // 38% margin: 7%
   assert.equal(commissionEarnedCents(0, 4000, true), 0);
+});
+
+test("payout: draws are absorbed up to what was earned; leftovers stay outstanding", () => {
+  assert.deepEqual(netPayout(100_000, 0), { payCents: 100_000, drawsAppliedCents: 0 });
+  assert.deepEqual(netPayout(100_000, 30_000), { payCents: 70_000, drawsAppliedCents: 30_000 });
+  assert.deepEqual(netPayout(100_000, 100_000), { payCents: 0, drawsAppliedCents: 100_000 });
+  assert.deepEqual(netPayout(100_000, 250_000), { payCents: 0, drawsAppliedCents: 100_000 }); // 150k stays owed
+  assert.deepEqual(netPayout(0, 50_000), { payCents: 0, drawsAppliedCents: 0 });
+  assert.deepEqual(netPayout(-5_000, 50_000), { payCents: 0, drawsAppliedCents: 0 });          // clawback carries forward
+});
+
+test("payout: draws are used oldest first, a partly used draw keeps its remainder", () => {
+  const draws = [{ id: "a", outstandingCents: 30_000 }, { id: "b", outstandingCents: 50_000 }, { id: "c", outstandingCents: 20_000 }];
+  assert.deepEqual(allocateDraws(draws, 0), []);
+  assert.deepEqual(allocateDraws(draws, 20_000), [{ id: "a", amountCents: 20_000 }]);
+  assert.deepEqual(allocateDraws(draws, 30_000), [{ id: "a", amountCents: 30_000 }]);
+  assert.deepEqual(allocateDraws(draws, 60_000), [{ id: "a", amountCents: 30_000 }, { id: "b", amountCents: 30_000 }]);
+  assert.deepEqual(allocateDraws(draws, 100_000).map((x) => x.amountCents), [30_000, 50_000, 20_000]);
+  assert.throws(() => allocateDraws(draws, 100_001));
+  assert.throws(() => allocateDraws(draws, -1));
 });
 
 test("deposit: 50% over $5k or with special-order materials", () => {

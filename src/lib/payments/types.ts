@@ -1,4 +1,5 @@
 import type { Stage } from "../rules.ts";
+import type { NewEntry } from "../commission/types.ts";
 
 export const METHODS = ["check", "card", "ach", "cash", "insurance_check", "financing"] as const;
 export type Method = (typeof METHODS)[number];
@@ -55,6 +56,10 @@ export interface PaymentTx {
   insert(p: NewPayment): Promise<PaymentRecord>;
   setStage(from: JobStageOrClosed, to: Stage, userId: string): Promise<void>;
   void(paymentId: string, userId: string, reason: string, at: Date): Promise<boolean>;
+  /** Commission ledger entry for a collected payment (written in the same transaction as the payment). */
+  insertCommission(e: NewEntry): Promise<void>;
+  /** Reverse that payment's commission entry, dated the day it was voided. No-op if none exists or already reversed. */
+  reverseCommission(paymentId: string, entryDate: string): Promise<void>;
 }
 
 export interface PaymentStore {

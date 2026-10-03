@@ -94,6 +94,25 @@ export function createPrismaPaymentStore(db: PrismaClient): PaymentStore {
             await tx.job.update({ where: { id: jobId }, data: { stage: to } });
             await tx.jobStageHistory.create({ data: { jobId, fromStage: from as Stage, toStage: to, changedBy: userId } });
           },
+          async insertCommission(e) {
+            await tx.commissionEntry.create({
+              data: {
+                estimatorId: e.estimatorId, jobId: e.jobId, paymentId: e.paymentId, kind: e.kind, rateBps: e.rateBps,
+                marginBps: e.marginBps, amountCents: BigInt(e.amountCents), entryDate: new Date(`${e.entryDate}T00:00:00Z`), note: e.note,
+              },
+            });
+          },
+          async reverseCommission(paymentId, entryDate) {
+            const rows = await tx.commissionEntry.findMany({ where: { paymentId, kind: { in: ["earned", "reversal"] } } });
+            const earned = rows.find((r) => r.kind === "earned");
+            if (!earned || rows.some((r) => r.kind === "reversal")) return;
+            await tx.commissionEntry.create({
+              data: {
+                estimatorId: earned.estimatorId, jobId: earned.jobId, paymentId, kind: "reversal", rateBps: earned.rateBps,
+                marginBps: earned.marginBps, amountCents: -earned.amountCents, entryDate: new Date(`${entryDate}T00:00:00Z`),
+              },
+            });
+          },
           async void(paymentId, userId, reason, at) {
             const res = await tx.payment.updateMany({
               where: { id: paymentId, jobId, voidedAt: null },

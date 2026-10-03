@@ -68,6 +68,35 @@ export function scopeCommissionRateBps(totals: ScopeTotals, ownTruck: boolean): 
   return commissionRateBps(totals.marginBps, ownTruck);
 }
 
+// ---------- Commission payouts and draws ----------
+/**
+ * What to pay for a period: everything unpaid and earned, minus draws already advanced.
+ * Draws are absorbed up to the earned amount; any draw left over stays outstanding for next time.
+ * Nothing is paid (and nothing is absorbed) if the unpaid total is zero or negative.
+ */
+export function netPayout(unpaidCents: number, drawsOutstandingCents: number): { payCents: number; drawsAppliedCents: number } {
+  if (unpaidCents <= 0) return { payCents: 0, drawsAppliedCents: 0 };
+  const drawsAppliedCents = Math.min(Math.max(0, drawsOutstandingCents), unpaidCents);
+  return { payCents: unpaidCents - drawsAppliedCents, drawsAppliedCents };
+}
+
+/** Spread an applied amount across draws oldest first; a partly used draw keeps its remainder. */
+export function allocateDraws(
+  draws: { id: string; outstandingCents: number }[], appliedCents: number,
+): { id: string; amountCents: number }[] {
+  const total = draws.reduce((s, d) => s + d.outstandingCents, 0);
+  if (appliedCents < 0 || appliedCents > total) throw new RangeError("Applied amount exceeds outstanding draws");
+  const out: { id: string; amountCents: number }[] = [];
+  let left = appliedCents;
+  for (const d of draws) {
+    if (left === 0) break;
+    const take = Math.min(left, d.outstandingCents);
+    if (take > 0) out.push({ id: d.id, amountCents: take });
+    left -= take;
+  }
+  return out;
+}
+
 // ---------- Insurance contingency ----------
 export const CONTINGENCY_FEE_BPS = 1000;   // 10% of insurance paid so far
 export const CANCELLATION_FEE_BPS = 500;   // 5% of payout if homeowner walks after approval

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/index.ts";
 import { can, hasRole } from "@/lib/auth/roles.ts";
 import { canTakeLeads } from "@/lib/leads/logic.ts";
+import { canManagePayouts } from "@/lib/commission/logic.ts";
 import { en } from "@/i18n/en.ts";
 import { SignOutButton } from "./sign-out-button.tsx";
 
@@ -31,6 +32,13 @@ export default async function HomePage() {
           <li><Link href="/leads">{en.leads.navList}</Link></li>
           <li><Link href="/leads/review">{en.leads.navReview}</Link></li>
           {user.role === "admin" && <li><Link href="/settings/marketing">{en.leads.navMarketing}</Link></li>}
+        </ul>
+      )}
+      {hasRole(user.role, ["estimator", "admin", "accounting"]) && (
+        <ul>
+          <li><Link href="/commissions">{user.role === "estimator" ? en.commission.navStatement : en.commission.navStatements}</Link></li>
+          {canManagePayouts(user.role) && <li><Link href="/commissions/payouts">{en.commission.navPayouts}</Link></li>}
+          {user.role === "admin" && <li><Link href="/settings/commission">{en.commission.navSchedule}</Link></li>}
         </ul>
       )}
       {hasRole(user.role, ["admin", "estimator", "production_manager", "accounting"]) && (

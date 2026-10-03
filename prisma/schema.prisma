@@ -347,3 +347,79 @@ model ScopeItem {
 
   @@map("scope_items")
 }
+
+model CommissionSettings {
+  id         Int      @id @db.SmallInt
+  cadence    String
+  anchorDate DateTime? @map("anchor_date") @db.Date
+  updatedBy  String?  @map("updated_by") @db.Uuid
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+
+  @@map("commission_settings")
+}
+
+model CommissionDraw {
+  id           String   @id @default(uuid()) @db.Uuid
+  estimatorId  String   @map("estimator_id") @db.Uuid
+  amountCents  BigInt   @map("amount_cents")
+  paidOn       DateTime @map("paid_on") @db.Date
+  appliedCents BigInt   @default(0) @map("applied_cents")
+  note         String?
+  createdBy    String?  @map("created_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  applications CommissionDrawApplication[]
+
+  @@map("commission_draws")
+}
+
+model CommissionRun {
+  id                String   @id @default(uuid()) @db.Uuid
+  estimatorId       String   @map("estimator_id") @db.Uuid
+  periodStart       DateTime @map("period_start") @db.Date
+  periodEnd         DateTime @map("period_end") @db.Date
+  grossCents        BigInt   @map("gross_cents")
+  drawsAppliedCents BigInt   @map("draws_applied_cents")
+  netCents          BigInt   @map("net_cents")
+  paidOn            DateTime @map("paid_on") @db.Date
+  note              String?
+  createdBy         String?  @map("created_by") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  entries           CommissionEntry[]
+  applications      CommissionDrawApplication[]
+
+  @@unique([estimatorId, periodEnd])
+  @@map("commission_runs")
+}
+
+model CommissionDrawApplication {
+  runId       String @map("run_id") @db.Uuid
+  drawId      String @map("draw_id") @db.Uuid
+  amountCents BigInt @map("amount_cents")
+  run         CommissionRun  @relation(fields: [runId], references: [id])
+  draw        CommissionDraw @relation(fields: [drawId], references: [id])
+
+  @@id([runId, drawId])
+  @@map("commission_draw_applications")
+}
+
+// The append-only commission ledger (table name kept from the original schema).
+model CommissionEntry {
+  id          String    @id @default(uuid()) @db.Uuid
+  estimatorId String    @map("estimator_id") @db.Uuid
+  jobId       String?   @map("job_id") @db.Uuid
+  paymentId   String?   @map("payment_id") @db.Uuid
+  kind        String    @default("earned")
+  rateBps     Int?      @map("rate_bps")
+  marginBps   Int?      @map("margin_bps")
+  amountCents BigInt    @map("amount_cents")
+  entryDate   DateTime  @map("entry_date") @db.Date
+  runId       String?   @map("run_id") @db.Uuid
+  paidOn      DateTime? @map("paid_on") @db.Date
+  note        String?
+  createdBy   String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  run         CommissionRun? @relation(fields: [runId], references: [id])
+
+  @@index([estimatorId, entryDate])
+  @@map("commission_payouts")
+}

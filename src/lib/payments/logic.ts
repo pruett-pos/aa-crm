@@ -3,6 +3,8 @@ import {
   grossMarginBps, nextStage, parseDollarsToCents, wouldOverpay,
 } from "../rules.ts";
 import type { Role } from "../auth/roles.ts";
+import { buildAccrual } from "../commission/logic.ts";
+import { localDate } from "../commission/periods.ts";
 import type { AuthUser } from "../auth/store.ts";
 import {
   METHODS, type JobStageOrClosed, type Method, type PaymentJob, type PaymentRecord, type PaymentStore, type PaymentType,
@@ -145,6 +147,9 @@ export async function recordPayment(
       collectedBy: input.recorder.id, receivedAt: at, photo,
     });
 
+    const accrual = buildAccrual(job, payment, localDate(at));
+    if (accrual) await tx.insertCommission(accrual);
+
     const after = [...existing, payment];
     const summary = summarize(job, after);
     let stageChanged = false;
@@ -172,6 +177,7 @@ export async function voidPayment(
   return store.transaction(p.jobId, async (tx) => {
     const ok = await tx.void(p.id, a.userId, reason, now());
     if (!ok) throw new PaymentError("already_voided");
+    await tx.reverseCommission(p.id, localDate(now()));
     const job = await tx.getJob();
     if (!job) throw new PaymentError("not_found");
     const summary = summarize(job, await tx.list());

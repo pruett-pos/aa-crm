@@ -265,24 +265,75 @@ CREATE TABLE payments (
 CREATE INDEX payments_job_idx ON payments (job_id);
 
 -- Commission ----------------------------------------------------------------
-CREATE TABLE commission_draws (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  estimator_id uuid NOT NULL REFERENCES users(id),
-  amount_cents bigint NOT NULL,
-  paid_on     date NOT NULL
+CREATE TABLE commission_settings (       -- single row: the pay schedule. Payouts are blocked until it is set.
+  id          smallint PRIMARY KEY CHECK (id = 1),
+  cadence     text NOT NULL CHECK (cadence IN ('weekly','biweekly','semimonthly','monthly')),
+  anchor_date date,                       -- a date a period ENDS on; used by weekly and biweekly
+  updated_by  uuid REFERENCES users(id),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CHECK (cadence NOT IN ('weekly','biweekly') OR anchor_date IS NOT NULL)
 );
 
-CREATE TABLE commission_payouts (       -- computed from payments via rules.ts
+CREATE TABLE commission_draws (          -- advances against future commission
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   estimator_id uuid NOT NULL REFERENCES users(id),
-  job_id      uuid NOT NULL REFERENCES jobs(id),
-  payment_id  uuid NOT NULL REFERENCES payments(id),
-  rate_bps    integer NOT NULL,
-  margin_bps  integer NOT NULL,
-  amount_cents bigint NOT NULL,
-  paid_on     date
+  amount_cents bigint NOT NULL CHECK (amount_cents > 0),
+  paid_on     date NOT NULL,
+  applied_cents bigint NOT NULL DEFAULT 0, -- how much payouts have absorbed so far
+  note        text,
+  created_by  uuid REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  CHECK (applied_cents >= 0 AND applied_cents <= amount_cents)
 );
 
+CREATE TABLE commission_runs (           -- one payout per estimator per pay period
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  estimator_id uuid NOT NULL REFERENCES users(id),
+  period_start date NOT NULL,
+  period_end  date NOT NULL,
+  gross_cents bigint NOT NULL,             -- unpaid commission paid out in this run
+  draws_applied_cents bigint NOT NULL,
+  net_cents   bigint NOT NULL,             -- gross - draws applied: what is actually paid
+  paid_on     date NOT NULL,
+  note        text,
+  created_by  uuid REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (estimator_id, period_end),
+  CHECK (net_cents = gross_cents - draws_applied_cents)
+);
+
+CREATE TABLE commission_draw_applications (
+  run_id      uuid NOT NULL REFERENCES commission_runs(id),
+  draw_id     uuid NOT NULL REFERENCES commission_draws(id),
+  amount_cents bigint NOT NULL CHECK (amount_cents > 0),
+  PRIMARY KEY (run_id, draw_id)
+);
+
+-- The commission ledger. Append-only: entries are never edited or deleted.
+-- earned = one per payment collected; reversal = a voided payment; adjustment = manual, with a reason.
+CREATE TABLE commission_payouts (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  estimator_id uuid NOT NULL REFERENCES users(id),
+  job_id      uuid REFERENCES jobs(id),
+  payment_id  uuid REFERENCES payments(id),
+  kind        text NOT NULL DEFAULT 'earned' CHECK (kind IN ('earned','reversal','adjustment')),
+  rate_bps    integer,
+  margin_bps  integer,
+  amount_cents bigint NOT NULL,            -- negative for reversals and clawbacks
+  entry_date  date NOT NULL,               -- local (Central) date; decides which pay period it belongs to
+  run_id      uuid REFERENCES commission_runs(id),
+  paid_on     date,
+  note        text,
+  created_by  uuid REFERENCES users(id),     -- who made a manual adjustment
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  CHECK (kind = 'adjustment' OR payment_id IS NOT NULL),
+  CHECK (kind <> 'adjustment' OR (note IS NOT NULL AND length(trim(note)) >= 3)),
+  CHECK (kind <> 'earned' OR (rate_bps IS NOT NULL AND margin_bps IS NOT NULL)),
+  CHECK ((run_id IS NULL) = (paid_on IS NULL))
+);
+CREATE UNIQUE INDEX one_earned_per_payment   ON commission_payouts (payment_id) WHERE kind = 'earned';
+CREATE UNIQUE INDEX one_reversal_per_payment ON commission_payouts (payment_id) WHERE kind = 'reversal';
+CREATE INDEX commission_unpaid_idx ON commission_payouts (estimator_id, entry_date) WHERE run_id IS NULL;
 -- Closeout --------------------------------------------------------------------
 CREATE TABLE punchlist_items (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

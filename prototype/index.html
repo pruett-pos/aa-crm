@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A&A CRM — Pipeline prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#1F3A5F; --navy-deep:#16294A; --brass:#D4A24C; --brass-soft:#F3E4C3;
+  --paper:#FAF7F0; --card:#FFFFFF; --ink:#1A1A1A; --muted:#5E6B78; --line:#E2DCCD;
+  --alert:#B4462F; --ok:#3E7A4F; --ins:#2F6E9E;
+  --font: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --cond: "Barlow Condensed", "Arial Narrow", "Barlow", sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#11192A; --card:#1A2438; --ink:#ECE7DC; --muted:#9AA6B4; --line:#2C3850;
+    --brass-soft:#3A3122; --navy:#1A2F4F; --navy-deep:#0D1626;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11192A; --card:#1A2438; --ink:#ECE7DC; --muted:#9AA6B4; --line:#2C3850;
+  --brass-soft:#3A3122; --navy:#1A2F4F; --navy-deep:#0D1626;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px); height:100%}
+body{margin:0; height:100%; background:var(--paper); color:var(--ink); font:15px/1.45 var(--font); display:flex; flex-direction:column}
+button,input,select{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--brass); outline-offset:2px}
+
+/* Top bar */
+.top{background:var(--navy-deep); color:#FAF7F0; display:flex; align-items:center; gap:18px; padding:10px 20px; flex-wrap:wrap}
+.mark{font-family:var(--cond); font-weight:700; font-size:22px; letter-spacing:.5px; display:flex; align-items:baseline; gap:8px}
+.mark b{color:var(--brass)}
+.mark span{font-family:var(--font); font-weight:400; font-size:13px; opacity:.7}
+.filters{display:flex; gap:8px; margin-left:auto; flex-wrap:wrap}
+.seg{display:flex; background:rgba(255,255,255,.08); border-radius:6px; padding:2px}
+.seg button{background:none; border:0; color:#D9DEE6; padding:5px 11px; border-radius:5px; cursor:pointer; font-size:13.5px}
+.seg button[aria-pressed="true"]{background:var(--brass); color:#1A1A1A; font-weight:600}
+.btn{border:0; border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:600}
+.btn-brass{background:var(--brass); color:#1A1A1A}
+.btn-line{background:transparent; border:1px solid var(--line); color:var(--ink)}
+.btn-navy{background:var(--navy); color:#FAF7F0}
+
+/* Board */
+.board-wrap{flex:1; overflow:auto}
+.board{display:grid; grid-auto-flow:column; grid-auto-columns:236px; gap:0 10px; padding:14px 20px 24px; min-height:100%; align-items:start}
+.group{grid-row:1; font-family:var(--cond); font-weight:600; font-size:14px; color:var(--muted); border-top:3px solid var(--navy); padding:6px 2px 0}
+.group.g-ins{border-color:var(--ins)}
+.group.g-money{border-color:var(--brass)}
+.col{grid-row:2; display:flex; flex-direction:column; gap:8px; padding-top:6px}
+.col h2{font-family:var(--cond); font-weight:600; font-size:17px; margin:0; display:flex; justify-content:space-between; align-items:baseline}
+.col h2 small{font-family:var(--font); font-size:12.5px; color:var(--muted); font-weight:500}
+.empty{border:1px dashed var(--line); border-radius:8px; padding:14px; color:var(--muted); font-size:13px; text-align:center}
+.card{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--navy); border-radius:4px 8px 8px 4px; padding:10px 12px; cursor:pointer; text-align:left; width:100%}
+.card.ins{border-left-color:var(--ins)}
+.card:hover{border-color:var(--brass); border-left-color:var(--brass)}
+.card .who{font-weight:600}
+.card .addr{font-size:13px; color:var(--muted)}
+.card .row{display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:13px}
+.amt{font-family:var(--cond); font-weight:600; font-size:17px}
+.chips{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px}
+.chip{font-size:11.5px; padding:1px 7px; border-radius:10px; background:var(--brass-soft); color:var(--ink)}
+.chip.ins{background:var(--ins); color:#fff}
+.age{color:var(--muted)} .age.late{color:var(--alert); font-weight:600}
+.init{width:24px; height:24px; border-radius:50%; background:var(--navy); color:#fff; display:inline-grid; place-items:center; font-size:11px; font-weight:600}
+
+/* Panel */
+.scrim{position:fixed; inset:0; background:rgba(10,15,25,.4); opacity:0; pointer-events:none; transition:opacity .2s}
+.scrim.on{opacity:1; pointer-events:auto}
+.panel{position:fixed; top:0; right:0; bottom:0; width:min(520px,100%); background:var(--paper); border-left:1px solid var(--line); transform:translateX(100%); transition:transform .25s ease; display:flex; flex-direction:column; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+.panel.on{transform:none}
+@media (prefers-reduced-motion: reduce){.panel,.scrim{transition:none}}
+.p-head{background:var(--navy); color:#FAF7F0; padding:16px 20px}
+.p-head h3{margin:0; font-family:var(--cond); font-size:26px; font-weight:600}
+.p-head p{margin:2px 0 0; opacity:.8; font-size:14px}
+.p-close{float:right; background:none; border:0; color:#fff; font-size:24px; cursor:pointer; line-height:1}
+.p-body{overflow:auto; padding:16px 20px 28px; flex:1}
+.sec{margin-bottom:22px}
+.sec h4{font-family:var(--cond); font-size:18px; margin:0 0 8px; font-weight:600}
+.steps{list-style:none; margin:0; padding:0; display:grid; gap:2px}
+.steps li{display:flex; gap:10px; align-items:center; font-size:14px; color:var(--muted)}
+.steps li .n{width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line); display:grid; place-items:center; font-size:11.5px; flex:none}
+.steps li.done{color:var(--ink)} .steps li.done .n{background:var(--navy); border-color:var(--navy); color:#fff}
+.steps li.now{color:var(--ink); font-weight:600} .steps li.now .n{background:var(--brass); border-color:var(--brass); color:#1A1A1A}
+.ledger{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:4px 14px}
+.ledger .l{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); gap:10px}
+.ledger .l:last-child{border-bottom:0}
+.ledger .l span{color:var(--muted); font-size:14px}
+.ledger .l strong{font-family:var(--cond); font-size:19px; font-weight:600}
+.ledger input{width:120px; text-align:right; border:1px solid var(--line); background:var(--paper); border-radius:5px; padding:4px 8px; font-family:var(--cond); font-size:18px}
+.note{font-size:13px; color:var(--muted); margin:6px 2px 0}
+.warn{color:var(--alert)}
+.actions{display:flex; gap:8px; flex-wrap:wrap}
+
+/* Modal */
+dialog{border:0; border-radius:10px; padding:0; width:min(440px,94vw); background:var(--paper); color:var(--ink)}
+dialog::backdrop{background:rgba(10,15,25,.45)}
+.m-head{background:var(--navy); color:#fff; padding:14px 18px; font-family:var(--cond); font-size:22px; font-weight:600}
+.m-body{padding:16px 18px; display:grid; gap:12px}
+label{display:grid; gap:4px; font-size:13.5px; color:var(--muted)}
+label input,label select{border:1px solid var(--line); background:var(--card); border-radius:6px; padding:8px 10px; color:var(--ink); font-size:15px}
+.route{background:var(--brass-soft); border-radius:8px; padding:10px 12px; font-size:14px}
+.m-foot{display:flex; justify-content:flex-end; gap:8px; padding:0 18px 16px}
+.toast{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:10px 16px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="mark"><b>A&amp;A</b> CRM <span>Prototype · fake data</span></div>
+  <div class="filters">
+    <div class="seg" role="group" aria-label="Market" id="fMarket">
+      <button aria-pressed="true" data-v="all">All markets</button>
+      <button aria-pressed="false" data-v="west_plains">West Plains</button>
+      <button aria-pressed="false" data-v="springfield">Springfield</button>
+    </div>
+    <div class="seg" role="group" aria-label="Job type" id="fType">
+      <button aria-pressed="true" data-v="all">All jobs</button>
+      <button aria-pressed="false" data-v="retail">Retail</button>
+      <button aria-pressed="false" data-v="insurance">Insurance</button>
+    </div>
+    <button class="btn btn-brass" id="newLead">New lead</button>
+  </div>
+</header>
+
+<div class="board-wrap"><div class="board" id="board"></div></div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" aria-hidden="true"></aside>
+
+<dialog id="leadDlg">
+  <div class="m-head">New lead</div>
+  <div class="m-body">
+    <label>Caller phone
+      <input id="lPhone" placeholder="417-555-0101" inputmode="tel"></label>
+    <label>Name <input id="lName" placeholder="First and last name"></label>
+    <label>Division
+      <select id="lDiv"></select></label>
+    <label>Job type
+      <select id="lType"><option value="retail">Retail</option><option value="insurance">Insurance</option></select></label>
+    <label>Market
+      <select id="lMarket"><option value="west_plains">West Plains</option><option value="springfield">Springfield</option></select></label>
+    <div class="route" id="routeBox" aria-live="polite"></div>
+  </div>
+  <div class="m-foot">
+    <button class="btn btn-line" id="lCancel">Cancel</button>
+    <button class="btn btn-navy" id="lSave">Create lead</button>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---- Business rules: mirrors src/lib/rules.ts ---- */
+const R = {
+  margin:(s,c)=> s>0 ? Math.round((s-c)*10000/s) : 0,
+  commRate:(m,truck)=>{ const b=truck?1000:800; if(m>=4000) return b; return Math.max(0,b-Math.floor((4000-m)/200)*100); },
+  contingency:p=>Math.round(p*0.10), cancelFee:p=>Math.round(p*0.05),
+  deposit:(c,so)=> (c>500000||so) ? Math.round(c/2) : 0,
+};
+const STAGES=[
+ ["new_lead","New lead","sales"],["appointment_set","Appointment set","sales"],["inspected","Inspected","sales"],
+ ["contingency_signed","Contingency signed","ins"],["claim_approved","Claim approved","ins"],
+ ["scope_presented","Scope presented","close"],["contract_signed","Contract signed","close"],["deposit_collected","Deposit collected","close"],
+ ["materials_ordered","Materials ordered","prod"],["scheduled","Scheduled","prod"],["in_production","In production","prod"],["closeout_punchlist","Closeout punchlist","prod"],
+ ["invoiced","Invoiced","money"],["depreciation_pending","Depreciation pending","money"],["paid_in_full","Paid in full","money"]];
+const GROUPS={sales:"Sales",ins:"Insurance",close:"Closing",prod:"Production",money:"Collections"};
+const INS_ONLY=["contingency_signed","claim_approved","depreciation_pending"];
+const DIV={roofing:"Roofing",siding:"Siding",gutters:"Gutters",windows_doors:"Windows & doors",insulation:"Insulation",spray_foam:"Spray foam",commercial:"Commercial"};
+const PEOPLE={
+  e1:{name:"Estimator One",truck:true}, e2:{name:"Estimator Two",truck:false}, e3:{name:"Estimator Three",truck:false},
+  pmR:{name:"Roofing PM"}, pmS:{name:"Siding PM"}, pmI:{name:"Insulation PM"} };
+const PM_BY_DIV={roofing:"pmR",commercial:"pmR",siding:"pmS",gutters:"pmS",windows_doors:"pmS",insulation:"pmI",spray_foam:"pmI"};
+const D=100; // dollars → cents
+let jobs=[
+ {id:1041,n:"Dana Miller",a:"100 Example Rd, West Plains",m:"west_plains",t:"insurance",div:["roofing","gutters"],st:"claim_approved",est:"e1",payout:18400*D,contract:0,cost:0,collected:0,days:3,phone:"417-555-0101"},
+ {id:1042,n:"Sam Ortiz",a:"200 Sample Ave, Springfield",m:"springfield",t:"retail",div:["siding"],st:"contract_signed",est:"e2",contract:24000*D,cost:15000*D,collected:0,days:1,so:false,phone:"417-555-0102"},
+ {id:1043,n:"Lee Carter",a:"14 Ridge Ln, West Plains",m:"west_plains",t:"retail",div:["windows_doors"],st:"new_lead",est:null,contract:0,cost:0,collected:0,days:0,phone:"417-555-0103",src:"DemandIQ"},
+ {id:1044,n:"Pat Nguyen",a:"88 Oak St, Springfield",m:"springfield",t:"insurance",div:["roofing"],st:"inspected",est:"e3",payout:0,contract:0,cost:0,collected:0,days:6},
+ {id:1045,n:"Jordan Reese",a:"5 Hilltop Dr, Willow Springs",m:"west_plains",t:"retail",div:["spray_foam"],st:"scope_presented",est:"e1",contract:4200*D,cost:2600*D,collected:0,days:2},
+ {id:1046,n:"Casey Brooks",a:"301 Elm St, Springfield",m:"springfield",t:"insurance",div:["roofing","siding"],st:"in_production",est:"e2",payout:31200*D,contract:31200*D,cost:19800*D,collected:15600*D,days:1},
+ {id:1047,n:"Morgan Hale",a:"72 County Rd 9, West Plains",m:"west_plains",t:"retail",div:["roofing"],st:"scheduled",est:"e1",contract:16800*D,cost:10700*D,collected:8400*D,days:4},
+ {id:1048,n:"Riley Fox",a:"9 Birch Ct, Springfield",m:"springfield",t:"retail",div:["gutters"],st:"invoiced",est:"e3",contract:3100*D,cost:1950*D,collected:0,days:9},
+ {id:1049,n:"Avery Stone",a:"440 Main St, West Plains",m:"west_plains",t:"insurance",div:["roofing"],st:"depreciation_pending",est:"e1",payout:14600*D,contract:14600*D,cost:8900*D,collected:11200*D,days:21},
+ {id:1050,n:"Quinn Park",a:"12 Lake Rd, Springfield",m:"springfield",t:"retail",div:["siding","windows_doors"],st:"materials_ordered",est:"e2",contract:38500*D,cost:24900*D,collected:19250*D,days:2,so:true},
+ {id:1051,n:"Blake Ruiz",a:"6 Pine St, West Plains",m:"west_plains",t:"insurance",div:["roofing"],st:"contingency_signed",est:"e1",payout:0,contract:0,cost:0,collected:0,days:4},
+ {id:1052,n:"Hayden Cole",a:"19 Sunset Blvd, Springfield",m:"springfield",t:"retail",div:["roofing"],st:"appointment_set",est:"e3",contract:0,cost:0,collected:0,days:1},
+ {id:1053,n:"Emery Ward",a:"230 Bluff Rd, West Plains",m:"west_plains",t:"retail",div:["siding"],st:"closeout_punchlist",est:"e1",contract:21900*D,cost:13600*D,collected:10950*D,days:2},
+ {id:1054,n:"Rowan Price",a:"55 Grove St, Springfield",m:"springfield",t:"retail",div:["insulation"],st:"paid_in_full",est:"e2",contract:6800*D,cost:4300*D,collected:6800*D,days:5},
+];
+let F={m:"all",t:"all"};
+const $=s=>document.querySelector(s);
+const money=c=>"$"+Math.round(c/100).toLocaleString();
+const pct=b=>(b/100).toFixed(1)+"%";
+const initials=id=>id? PEOPLE[id].name.split(" ").map(w=>w[0]).join("") : "–";
+const stagesFor=t=>STAGES.filter(s=>t==="insurance"||!INS_ONLY.includes(s[0]));
+const jobValue=j=>j.contract||j.payout||0;
+
+function render(){
+  const b=$("#board"); b.innerHTML="";
+  const vis=jobs.filter(j=>(F.m==="all"||j.m===F.m)&&(F.t==="all"||j.t===F.t));
+  const shown=STAGES.filter(s=>F.t!=="retail"||!INS_ONLY.includes(s[0]));
+  let col=1;
+  // group headers spanning their columns
+  const order=[...new Set(shown.map(s=>s[2]))];
+  order.forEach(g=>{
+    const n=shown.filter(s=>s[2]===g).length;
+    const h=document.createElement("div");
+    h.className="group "+(g==="ins"?"g-ins":g==="money"?"g-money":"");
+    h.style.gridColumn=`${col} / span ${n}`; h.textContent=GROUPS[g]; b.appendChild(h); col+=n;
+  });
+  shown.forEach(([key,label],i)=>{
+    const list=vis.filter(j=>j.st===key);
+    const c=document.createElement("section"); c.className="col"; c.style.gridColumn=i+1;
+    const total=list.reduce((a,j)=>a+jobValue(j),0);
+    c.innerHTML=`<h2>${label}<small>${list.length}${total?" · "+money(total):""}</small></h2>`;
+    if(!list.length) c.insertAdjacentHTML("beforeend",`<div class="empty">No jobs here</div>`);
+    list.forEach(j=>{
+      const late=j.days>=7;
+      const el=document.createElement("button"); el.className="card"+(j.t==="insurance"?" ins":"");
+      el.innerHTML=`<div class="who">${j.n}</div><div class="addr">${j.a}</div>
+        <div class="chips">${j.t==="insurance"?'<span class="chip ins">Insurance</span>':""}${j.div.map(d=>`<span class="chip">${DIV[d]}</span>`).join("")}${j.src?`<span class="chip">${j.src}</span>`:""}</div>
+        <div class="row"><span class="amt">${jobValue(j)?money(jobValue(j)):"—"}</span>
+        <span class="age ${late?"late":""}">${j.days}d in stage</span><span class="init" title="${j.est?PEOPLE[j.est].name:"Unassigned"}">${initials(j.est)}</span></div>`;
+      el.onclick=()=>openJob(j.id);
+      c.appendChild(el);
+    });
+    b.appendChild(c);
+  });
+}
+
+function openJob(id){
+  const j=jobs.find(x=>x.id===id), p=$("#panel");
+  const list=stagesFor(j.t), idx=list.findIndex(s=>s[0]===j.st);
+  const est=j.est?PEOPLE[j.est]:null;
+  const gm=R.margin(j.contract,j.cost), rate=est?R.commRate(gm,est.truck):0;
+  const dep=R.deposit(j.contract,j.so);
+  let nextI=idx+1; if(list[nextI]&&list[nextI][0]==="deposit_collected"&&dep===0) nextI++;
+  const next=list[nextI];
+  p.innerHTML=`
+   <div class="p-head"><button class="p-close" aria-label="Close" id="pClose">×</button>
+     <h3>${j.n}</h3><p>Job #${j.id} · ${j.a}</p></div>
+   <div class="p-body">
+    <div class="sec"><h4>Money</h4><div class="ledger">
+      ${j.t==="insurance"?`
+      <div class="l"><span>Insurance payout (RCV)</span><input type="number" min="0" step="100" data-f="payout" value="${j.payout/100}" aria-label="Insurance payout"></div>
+      <div class="l"><span>Contingency fee (10%)</span><strong>${money(R.contingency(j.payout))}</strong></div>
+      <div class="l"><span>Cancellation fee if they walk (5%)</span><strong>${money(R.cancelFee(j.payout))}</strong></div>`:""}
+      <div class="l"><span>Contract price</span><input type="number" min="0" step="100" data-f="contract" value="${j.contract/100}" aria-label="Contract price"></div>
+      <div class="l"><span>Est. materials + labor</span><input type="number" min="0" step="100" data-f="cost" value="${j.cost/100}" aria-label="Estimated cost"></div>
+      <div class="l"><span>Gross margin</span><strong class="${j.contract&&gm<4000?"warn":""}">${j.contract?pct(gm):"—"}</strong></div>
+      <div class="l"><span>Deposit required</span><strong>${dep?money(dep):"None"}</strong></div>
+      <div class="l"><span>Collected so far</span><strong>${money(j.collected)}</strong></div>
+      <div class="l"><span>Commission rate${est?` (${est.truck?"own truck":"company truck"})`:""}</span><strong class="${est&&rate<(est.truck?1000:800)?"warn":""}">${est&&j.contract?pct(rate):"—"}</strong></div>
+      <div class="l"><span>Commission earned on collected</span><strong>${money(Math.round(j.collected*rate/10000))}</strong></div>
+    </div>
+    <p class="note">Margin and commission are visible to estimators and admin only. ${j.contract&&gm<4000?`<span class="warn">Below 40% margin — commission drops 1 point per 2 points of margin.</span>`:""}</p></div>
+
+    <div class="sec"><h4>Progress</h4><ol class="steps">
+      ${list.map((s,i)=>`<li class="${i<idx?"done":i===idx?"now":""}"><span class="n">${i<idx?"✓":i+1}</span>${s[1]}${s[0]==="deposit_collected"&&dep===0?" (skipped — no deposit due)":""}</li>`).join("")}
+    </ol></div>
+
+    <div class="sec"><h4>People</h4><div class="ledger">
+      <div class="l"><span>Estimator</span><strong>${est?est.name:"Unassigned"}</strong></div>
+      <div class="l"><span>Production Manager</span><strong>${PEOPLE[PM_BY_DIV[j.div[0]]].name}</strong></div>
+    </div></div>
+
+    <div class="actions">
+      ${next?`<button class="btn btn-brass" id="advance">Move to ${next[1].toLowerCase()}</button>`:""}
+      ${j.t==="insurance"&&["claim_approved","scope_presented"].includes(j.st)?`<button class="btn btn-line" id="walk">Homeowner cancelled</button>`:""}
+    </div>
+   </div>`;
+  p.classList.add("on"); p.setAttribute("aria-hidden","false"); $("#scrim").classList.add("on");
+  $("#pClose").onclick=closeJob; $("#pClose").focus();
+  p.querySelectorAll("input[data-f]").forEach(inp=>inp.onchange=()=>{ j[inp.dataset.f]=Math.max(0,+inp.value||0)*100; openJob(j.id); render(); });
+  if(next) $("#advance").onclick=()=>{ j.st=next[0]; j.days=0; render(); openJob(j.id); toast(`Moved to ${next[1].toLowerCase()}`); };
+  const w=$("#walk"); if(w) w.onclick=()=>{ toast(`Cancellation fee of ${money(R.cancelFee(j.payout))} invoiced`); jobs=jobs.filter(x=>x.id!==j.id); closeJob(); render(); };
+}
+function closeJob(){ $("#panel").classList.remove("on"); $("#panel").setAttribute("aria-hidden","true"); $("#scrim").classList.remove("on"); }
+$("#scrim").onclick=closeJob;
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeJob(); });
+
+function seg(id,key){ document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(`#${id} button`).forEach(x=>x.setAttribute("aria-pressed","false"));
+  b.setAttribute("aria-pressed","true"); F[key]=b.dataset.v; render(); }); }
+seg("fMarket","m"); seg("fType","t");
+
+/* New lead + call routing: existing customer → last estimator, else division PM */
+const dlg=$("#leadDlg");
+$("#lDiv").innerHTML=Object.entries(DIV).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+function route(){
+  const phone=$("#lPhone").value.trim(), prior=jobs.find(j=>j.phone&&j.phone===phone&&j.est);
+  const box=$("#routeBox");
+  if(prior){ $("#lName").value=prior.n; box.innerHTML=`Existing customer. Route to <b>${PEOPLE[prior.est].name}</b>, who handled job #${prior.id}.`; return prior.est; }
+  box.innerHTML=`New customer. Route to <b>${PEOPLE[PM_BY_DIV[$("#lDiv").value]].name}</b> for ${DIV[$("#lDiv").value].toLowerCase()}.`; return null;
+}
+["#lPhone","#lDiv"].forEach(s=>$(s).addEventListener("input",route));
+$("#newLead").onclick=()=>{ $("#lPhone").value=""; $("#lName").value=""; route(); dlg.showModal(); };
+$("#lCancel").onclick=()=>dlg.close();
+$("#lSave").onclick=()=>{
+  const est=route(), name=$("#lName").value.trim()||"New caller";
+  jobs.push({id:Math.max(...jobs.map(j=>j.id))+1,n:name,a:"Address to confirm",m:$("#lMarket").value,t:$("#lType").value,div:[$("#lDiv").value],st:"new_lead",est,contract:0,cost:0,collected:0,payout:0,days:0,phone:$("#lPhone").value.trim()});
+  dlg.close(); render(); toast(`Lead created for ${name}`);
+};
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("on"),2200); }
+render();
+</script>
+</body>
+</html>

@@ -10,7 +10,7 @@ jobs in parallel with Leap for one estimator. Full cutover is a separate decisio
 | Admin (AL, office manager) | Everything, incl. commission settings and user management |
 | CSR | Create leads/customers, book appointments, view all jobs, route calls |
 | Estimator | Own leads and jobs; build scopes; sign contracts; record payments; see **only their own** commissions |
-| Production Manager | Their division's jobs from contract onward; schedule crews; closeout |
+| Production Manager | Their division's jobs from contract onward; schedule crews; closeout; see scope margin |
 | Crew leader | Read-only view of assigned jobs, upload photos, request change orders |
 | Accounting | Invoices, payments, depreciation, commission payouts, QBO sync status |
 
@@ -64,12 +64,12 @@ Exit states: Lost (reason required), Cancelled after approval * (triggers cancel
   items price from the Pruett catalog at Builder plan (retail − 12%),
   refreshed by a nightly sync from Pruett POS.
 - Each scope shows estimated material cost, labor cost, sale price, and gross
-  margin % — margin is visible to estimator and admin only, never on the customer PDF.
-- Customer picks a package → contract generated → e-signed (Dropbox Sign or DocuSign API; do not build e-signature in-house).
+  margin % — margin is visible to estimator, Production Manager and admin, never on the customer PDF.
+- Customer picks a package → contract generated → e-signed (Dropbox Sign API; do not build e-signature in-house).
 
 ## 6. Insurance jobs
 
-- Contingency agreement signed at inspection. A&A fee = 10% of insurance payout.
+- Contingency agreement signed at inspection. A&A fee = 10% of what insurance has paid so far.
 - If homeowner does not proceed after claim approval: cancellation fee = 5% of payout.
 - Customer type: `deductible_only` (pays deductible, covered repairs) or
   `upgrade` (covered repairs + paid upgrades, priced as a separate change order).
@@ -132,3 +132,13 @@ outstanding depreciation, AR aging, commissions owed.
 
 - 2026-10: Stack = Next.js + Postgres on Railway, alongside Pruett POS.
 - 2026-10: Business rules centralised in `src/lib/rules.ts`.
+- 2026-10 (open questions resolved by AL):
+  1. Commission uses full 2-point steps: 39% GM still pays 8%. No code change.
+  2. Contingency fee = 10% of what insurance has already paid (ACV, then released
+     depreciation), recalculated as payments arrive. Not RCV.
+  3. Upgrade portion is a separate retail scope of work (change order) and earns
+     retail commission on its own margin; no contingency fee applies to it.
+     Open detail: if an upgrade replaces a covered line item, include only the
+     customer-paid difference.
+  4. Production Managers can see margin (updates the Scopes rule in section 5 and the roles table).
+  5. E-signature vendor = Dropbox Sign. Build under `src/integrations/dropbox-sign/`.

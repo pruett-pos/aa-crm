@@ -38,11 +38,17 @@ export function commissionEarnedCents(
 }
 
 // ---------- Insurance contingency ----------
-export const CONTINGENCY_FEE_BPS = 1000;   // 10% of payout
+export const CONTINGENCY_FEE_BPS = 1000;   // 10% of insurance paid so far
 export const CANCELLATION_FEE_BPS = 500;   // 5% of payout if homeowner walks after approval
 
-export function contingencyFeeCents(payoutCents: number): number {
-  return Math.round((payoutCents * CONTINGENCY_FEE_BPS) / 10000);
+/**
+ * Contingency fee is 10% of what insurance has actually paid (ACV check, then
+ * released depreciation) — not of approved RCV. Pass the running total of
+ * carrier payments; the fee grows as payments arrive. Upgrade work is a
+ * separate retail scope and is never included here.
+ */
+export function contingencyFeeCents(insurancePaidCents: number): number {
+  return Math.round((insurancePaidCents * CONTINGENCY_FEE_BPS) / 10000);
 }
 export function cancellationFeeCents(payoutCents: number): number {
   return Math.round((payoutCents * CANCELLATION_FEE_BPS) / 10000);

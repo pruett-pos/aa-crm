@@ -36,6 +36,21 @@ test("insurance contingency and cancellation fees", () => {
   assert.equal(cancellationFeeCents(1_800_000), 90_000); // → $900
 });
 
+test("contingency fee is based on insurance paid so far, not RCV", () => {
+  // $18k RCV approved, $12k ACV paid so far → fee on $12k only
+  assert.equal(contingencyFeeCents(1_200_000), 120_000);
+  assert.equal(contingencyFeeCents(0), 0);
+  // depreciation released later → fee recalculated on the new running total
+  assert.equal(contingencyFeeCents(1_800_000), 180_000);
+});
+
+test("upgrade scope earns retail commission on its own margin", () => {
+  // $5k upgrade scope at 38% GM, fully collected → 7% = $350, independent of the insurance scope
+  const margin = grossMarginBps(500_000, 310_000);
+  assert.equal(margin, 3800);
+  assert.equal(commissionEarnedCents(500_000, margin, false), 35_000);
+});
+
 test("deposit: 50% over $5k or with special-order materials", () => {
   assert.equal(depositRequiredCents(500_000, false), 0);        // exactly $5k: none
   assert.equal(depositRequiredCents(500_100, false), 250_050);

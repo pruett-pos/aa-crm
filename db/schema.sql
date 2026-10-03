@@ -30,6 +30,24 @@ CREATE TABLE users (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- Auth: magic-link tokens and sessions. Only SHA-256 hashes are stored, never raw values.
+CREATE TABLE login_tokens (
+  token_hash text PRIMARY KEY,
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  used_at    timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX login_tokens_user_idx ON login_tokens (user_id);
+
+CREATE TABLE sessions (
+  session_hash text PRIMARY KEY,
+  user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at   timestamptz NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX sessions_user_idx ON sessions (user_id);
+
 -- Call routing: one PM per division per market
 CREATE TABLE division_managers (
   division  division NOT NULL,

@@ -1,0 +1,62 @@
+// Slice 1 models only (users + auth). db/schema.sql is the reference design;
+// add models here as each later slice needs them.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  csr
+  estimator
+  production_manager
+  crew_leader
+  accounting
+
+  @@map("user_role")
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  fullName      String   @map("full_name")
+  email         String   @unique
+  phone         String?
+  role          UserRole
+  ownTruck      Boolean  @default(false) @map("own_truck")
+  preferredLang String   @default("en") @map("preferred_lang")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  loginTokens LoginToken[]
+  sessions    Session[]
+
+  @@map("users")
+}
+
+model LoginToken {
+  tokenHash String    @id @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz()
+  usedAt    DateTime? @map("used_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("login_tokens")
+}
+
+model Session {
+  sessionHash String   @id @map("session_hash")
+  userId      String   @map("user_id") @db.Uuid
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz()
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}

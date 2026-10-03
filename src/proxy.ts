@@ -1,0 +1,20 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+const SESSION_COOKIE = "aa_session";
+const PUBLIC_PREFIXES = ["/login", "/api/auth/"];
+
+// Cheap gate: no session cookie means no access. The cookie is only checked for
+// presence here; routes and pages validate it against the database.
+export function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  if (req.cookies.get(SESSION_COOKIE)) return NextResponse.next();
+  if (pathname.startsWith("/api/")) {
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  return NextResponse.redirect(new URL("/login", req.url));
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};

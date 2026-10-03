@@ -5,6 +5,7 @@ import { getScopeStore } from "@/lib/scopes/index.ts";
 import { canReadScopes } from "@/lib/scopes/service.ts";
 import { canViewPayments } from "@/lib/payments/logic.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
+import { STAGES } from "@/lib/rules.ts";
 import { en } from "@/i18n/en.ts";
 
 export default async function JobsPage() {
@@ -37,6 +38,9 @@ export default async function JobsPage() {
               {scopes && <Link href={`/jobs/${j.id}/scope`}>{en.jobs.openScope}</Link>}
               {scopes && payments && " · "}
               {payments && <Link href={`/jobs/${j.id}/payments`}>{en.payments.openPayments}</Link>}
+              {scopes && STAGES.indexOf(j.stage) >= STAGES.indexOf("contract_signed") && (
+                <>{(scopes || payments) && " · "}<Link href={`/jobs/${j.id}/production`}>{en.production.openProduction}</Link></>
+              )}
             </li>
           ))}
         </ul>

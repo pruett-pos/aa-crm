@@ -11,7 +11,7 @@ import { TIERS, type LineKind, type ScopeItemInput, type Tier } from "@/lib/scop
 import { DIVISIONS } from "@/lib/leads/types.ts";
 import { SCOPE_DEFAULT_TARGET_MARGIN_BPS, commissionRateBps, type Division } from "@/lib/rules.ts";
 
-type Line = { kind: LineKind; productId: string; description: string; quantity: string; unitCost: string };
+type Line = { kind: LineKind; productId: string; description: string; quantity: string; unitCost: string; color: string };
 type Draft = { title: string; targetPct: string; lines: Line[] };
 
 const money = (cents: number) => (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -27,6 +27,7 @@ function draftFrom(view: ScopeView | undefined, tier: Tier): Draft {
     lines: view.items.map((i) => ({
       kind: i.kind, productId: i.productId ?? "", description: i.kind === "material" ? "" : i.description,
       quantity: String(i.quantity), unitCost: i.kind === "material" ? "" : ((i.unitCostCents ?? 0) / 100).toFixed(2),
+      color: i.color ?? "",
     })),
   };
 }
@@ -36,6 +37,7 @@ function toInput(d: Draft): { targetMarginBps: number; items: ScopeItemInput[] }
     targetMarginBps: Math.round(parseFloat(d.targetPct) * 100),
     items: d.lines.map((l) => ({
       kind: l.kind,
+      ...(l.kind === "material" && l.color.trim() ? { color: l.color.trim() } : {}),
       ...(l.kind === "material"
         ? { productId: l.productId }
         : { description: l.description, unitCostCents: Math.round(parseFloat(l.unitCost || "0") * 100) }),
@@ -82,7 +84,7 @@ export function ScopeBuilder(props: {
   const setLine = (i: number, patch: Partial<Line>) =>
     update({ lines: draft.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) });
   const addLine = (kind: LineKind) =>
-    update({ lines: [...draft.lines, { kind, productId: "", description: "", quantity: "1", unitCost: "" }] });
+    update({ lines: [...draft.lines, { kind, productId: "", description: "", quantity: "1", unitCost: "", color: "" }] });
 
   // Live preview uses the same pricing code as the server. The server recomputes on save.
   const preview = useMemo(() => {
@@ -196,7 +198,7 @@ export function ScopeBuilder(props: {
 
           <table className="lines">
             <thead>
-              <tr><th>{en.scope.kindLabels.material}</th><th>{en.scope.quantity}</th><th>{en.scope.unitCost}</th><th>{en.scope.unitPrice}</th><th /></tr>
+              <tr><th>{en.scope.kindLabels.material}</th><th>{en.production.colColor}</th><th>{en.scope.quantity}</th><th>{en.scope.unitCost}</th><th>{en.scope.unitPrice}</th><th /></tr>
             </thead>
             <tbody>
               {draft.lines.map((l, i) => {
@@ -212,6 +214,12 @@ export function ScopeBuilder(props: {
                       ) : (
                         <input aria-label={en.scope.description} placeholder={en.scope.kindLabels[l.kind]} value={l.description}
                           onChange={(e) => setLine(i, { description: e.target.value })} />
+                      )}
+                    </td>
+                    <td>
+                      {l.kind === "material" && (
+                        <input aria-label={en.production.colColor} placeholder={en.production.colorPlaceholder} maxLength={60}
+                          value={l.color} onChange={(e) => setLine(i, { color: e.target.value })} />
                       )}
                     </td>
                     <td><input aria-label={en.scope.quantity} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>

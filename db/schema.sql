@@ -107,7 +107,10 @@ CREATE TABLE jobs (
   production_manager_id uuid REFERENCES users(id),
   crew_leader_id uuid REFERENCES users(id),
   appointment_at timestamptz,
-  install_date   date,
+  install_date   date,                             -- earliest trade install date, kept in step by production scheduling
+  materials_ordered_at timestamptz,                -- when the materials order was recorded
+  materials_ordered_by uuid REFERENCES users(id),
+  po_reference   text,                             -- purchase order number (entered by hand until the Pruett link exists)
   lost_reason    text,
   contract_cents bigint,                          -- set at contract_signed
   cost_cents     bigint,                          -- est. materials + labor
@@ -336,6 +339,37 @@ CREATE TABLE commission_payouts (
 CREATE UNIQUE INDEX one_earned_per_payment   ON commission_payouts (payment_id) WHERE kind = 'earned';
 CREATE UNIQUE INDEX one_reversal_per_payment ON commission_payouts (payment_id) WHERE kind = 'reversal';
 CREATE INDEX commission_unpaid_idx ON commission_payouts (estimator_id, entry_date) WHERE run_id IS NULL;
+-- Production scheduling ------------------------------------------------------
+-- One row per job and trade (division). A trade with no row yet is "not scheduled".
+CREATE TABLE production_trades (
+  job_id        uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  division      division NOT NULL,
+  status        text NOT NULL DEFAULT 'not_scheduled' CHECK (status IN ('not_scheduled','proposed','scheduled','in_production','complete')),
+  install_date  date,
+  crew_leader_id uuid REFERENCES users(id),
+  proposed_by   uuid REFERENCES users(id),      -- the estimator (or admin) who proposed the date
+  confirmed_by  uuid REFERENCES users(id),      -- the trade's Production Manager (or admin) who assigned the crew
+  started_at    timestamptz,
+  completed_at  timestamptz,
+  notes         text,
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (job_id, division),
+  CHECK (status NOT IN ('scheduled','in_production','complete') OR (install_date IS NOT NULL AND crew_leader_id IS NOT NULL))
+);
+CREATE INDEX production_trades_crew_idx ON production_trades (crew_leader_id, install_date);
+CREATE INDEX production_trades_date_idx ON production_trades (install_date);
+
+-- Audit log of every scheduling action.
+CREATE TABLE production_events (
+  id          bigserial PRIMARY KEY,
+  job_id      uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  division    division,
+  actor_id    uuid REFERENCES users(id),
+  action      text NOT NULL,
+  detail      text,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX production_events_job_idx ON production_events (job_id, created_at);
 -- Closeout --------------------------------------------------------------------
 CREATE TABLE punchlist_items (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

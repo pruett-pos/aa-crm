@@ -5,7 +5,7 @@ import type {
 } from "./types.ts";
 
 type DbItem = {
-  kind: string; sortOrder: number; productId: string | null; description: string;
+  id: string; kind: string; sortOrder: number; productId: string | null; description: string;
   quantity: { toString(): string }; unitCostCents: bigint; unitPriceCents: bigint; color: string | null;
 };
 type DbScope = {
@@ -21,7 +21,7 @@ export function toStored(s: DbScope): StoredScope {
     saleCents, costCents,
     marginBps: saleCents > 0 ? Math.round(((saleCents - costCents) * 10000) / saleCents) : 0,
     items: [...s.items].sort((a, b) => a.sortOrder - b.sortOrder).map((i) => ({
-      kind: i.kind as LineKind, sortOrder: i.sortOrder, productId: i.productId,
+      id: i.id, kind: i.kind as LineKind, sortOrder: i.sortOrder, productId: i.productId,
       description: i.description, quantity: Number(i.quantity.toString()),
       unitCostCents: Number(i.unitCostCents), unitPriceCents: Number(i.unitPriceCents), color: i.color,
     })),

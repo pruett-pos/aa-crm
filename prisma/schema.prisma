@@ -157,6 +157,9 @@ model Job {
   createdBy           String?    @map("created_by") @db.Uuid
   appointmentAt       DateTime?  @map("appointment_at") @db.Timestamptz()
   installDate         DateTime?  @map("install_date") @db.Date
+  materialsOrderedAt  DateTime?  @map("materials_ordered_at") @db.Timestamptz()
+  materialsOrderedBy  String?    @map("materials_ordered_by") @db.Uuid
+  poReference         String?    @map("po_reference")
   createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz()
   contractCents       BigInt?    @map("contract_cents")
   costCents           BigInt?    @map("cost_cents")
@@ -434,4 +437,34 @@ model InsuranceClaim {
   depreciationReceivedAt DateTime? @map("depreciation_received_at") @db.Timestamptz()
 
   @@map("insurance_claims")
+}
+// One row per job and trade; a trade with no row yet is "not scheduled".
+model ProductionTrade {
+  jobId        String    @map("job_id") @db.Uuid
+  division     Division
+  status       String    @default("not_scheduled")
+  installDate  DateTime? @map("install_date") @db.Date
+  crewLeaderId String?   @map("crew_leader_id") @db.Uuid
+  proposedBy   String?   @map("proposed_by") @db.Uuid
+  confirmedBy  String?   @map("confirmed_by") @db.Uuid
+  startedAt    DateTime? @map("started_at") @db.Timestamptz()
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz()
+  notes        String?
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@id([jobId, division])
+  @@index([crewLeaderId, installDate])
+  @@map("production_trades")
+}
+
+model ProductionEvent {
+  id        BigInt    @id @default(autoincrement())
+  jobId     String    @map("job_id") @db.Uuid
+  division  Division?
+  actorId   String?   @map("actor_id") @db.Uuid
+  action    String
+  detail    String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("production_events")
 }

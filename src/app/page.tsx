@@ -28,6 +28,9 @@ export default async function HomePage() {
         {en.home.roleLabel}: <span className="badge">{en.roles[user.role]}</span>
       </p>
       {reportsFor(user.role).length > 0 && <p><Link href="/reports">{en.reports.navLabel}</Link></p>}
+      {hasRole(user.role, ["admin", "estimator", "production_manager", "crew_leader"]) && (
+        <p><Link href="/schedule">{en.production.navSchedule}</Link></p>
+      )}
       {canTakeLeads(user.role) && (
         <ul>
           <li><Link href="/leads/new">{en.leads.navNew}</Link></li>

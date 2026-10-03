@@ -31,6 +31,8 @@ export type ScopeItemInput = {
 };
 
 export type ComputedItem = {
+  /** Present on lines read back from the database; computed (unsaved) lines have none. */
+  id?: string;
   kind: LineKind;
   sortOrder: number;
   productId: string | null;

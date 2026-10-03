@@ -64,3 +64,8 @@ select { width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #b9b4a8; borde
 .check input { width: auto; }
 .tab .tick { color: var(--brass); font-weight: 700; }
 .tab.on .tick { color: #fff; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 0.5rem; }
+@media (max-width: 640px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+.ok { color: #1d6b3a; font-weight: 600; }
+tr.voided td { text-decoration: line-through; color: #8a867c; }
+tr.voided td:last-child { text-decoration: none; }

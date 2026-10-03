@@ -137,6 +137,7 @@ model Job {
   property            Property   @relation(fields: [propertyId], references: [id])
   scopes              Scope[]
   documents           Document[]
+  payments            Payment[]
   stageHistory        JobStageHistory[]
 
   @@map("jobs")
@@ -213,6 +214,40 @@ model JobStageHistory {
   job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@map("job_stage_history")
+}
+
+enum PaymentMethod {
+  check
+  card
+  ach
+  cash
+  insurance_check
+  financing
+
+  @@map("payment_method")
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  jobId          String        @map("job_id") @db.Uuid
+  amountCents    BigInt        @map("amount_cents")
+  method         PaymentMethod
+  isDeposit      Boolean       @default(false) @map("is_deposit")
+  isDepreciation Boolean       @default(false) @map("is_depreciation")
+  collectedBy    String?       @map("collected_by") @db.Uuid
+  checkPhotoUrl  String?       @map("check_photo_url")
+  receivedAt     DateTime      @default(now()) @map("received_at") @db.Timestamptz()
+  reference      String?
+  notes          String?
+  checkPhotoData Bytes?        @map("check_photo_data")
+  checkPhotoMime String?       @map("check_photo_mime")
+  voidedAt       DateTime?     @map("voided_at") @db.Timestamptz()
+  voidedBy       String?       @map("voided_by") @db.Uuid
+  voidReason     String?       @map("void_reason")
+  job            Job           @relation(fields: [jobId], references: [id])
+
+  @@index([jobId])
+  @@map("payments")
 }
 
 model IntegrationEvent {

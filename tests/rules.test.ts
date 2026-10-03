@@ -5,6 +5,7 @@ import {
   contingencyFeeCents, cancellationFeeCents, depositRequiredCents,
   pruettPriceCents, routeCall, stagesFor, nextStage,
   priceForTargetMarginCents, scopeTotals, scopeCommissionRateBps,
+  depositDueCents, balanceDueCents, wouldOverpay, parseDollarsToCents,
 } from "../src/lib/rules.ts";
 
 test("gross margin", () => {
@@ -82,6 +83,43 @@ test("scope commission preview: 40% pays 8%, 38% pays 7%, 39% still 8%", () => {
   assert.equal(at(3900), 800);
   assert.equal(at(3800), 700);
   assert.equal(scopeCommissionRateBps({ costCents: 0, saleCents: 0, marginBps: 4000 }, true), 1000);
+});
+
+test("payments: deposit due and balance never go negative", () => {
+  assert.equal(depositDueCents(522_000, 0), 522_000);
+  assert.equal(depositDueCents(522_000, 200_000), 322_000);
+  assert.equal(depositDueCents(522_000, 522_000), 0);
+  assert.equal(depositDueCents(522_000, 600_000), 0);
+  assert.equal(depositDueCents(0, 0), 0);
+  assert.equal(balanceDueCents(1_044_000, 522_000), 522_000);
+  assert.equal(balanceDueCents(1_044_000, 1_044_000), 0);
+  assert.equal(balanceDueCents(1_044_000, 2_000_000), 0);
+});
+
+test("payments: overpay boundary", () => {
+  assert.equal(wouldOverpay(1_000, 600, 400), false); // exactly the total is fine
+  assert.equal(wouldOverpay(1_000, 600, 401), true);
+  assert.equal(wouldOverpay(1_000, 0, 1_000), false);
+});
+
+test("payments: dollar parsing is exact and strict", () => {
+  assert.equal(parseDollarsToCents("1234"), 123_400);
+  assert.equal(parseDollarsToCents("1,234.50"), 123_450);
+  assert.equal(parseDollarsToCents("$99.9"), 9_990);
+  assert.equal(parseDollarsToCents(" 0.07 "), 7);
+  assert.equal(parseDollarsToCents("19.99"), 1_999); // would be 1998.9999 as a float multiply
+  assert.equal(parseDollarsToCents("1.005"), null);   // no sub-cent values
+  for (const bad of ["", "0", "0.00", "-5", "abc", "1e3", "1,23", "12,34,567", "$", "5.", ".5", "1 000", "99999999999999999999"]) {
+    assert.equal(parseDollarsToCents(bad), null, bad);
+  }
+});
+
+test("payments: commission earned on amount collected, not sold", () => {
+  // $10,440 job at 40% margin, $5,220 collected so far -> 8% -> $417.60
+  assert.equal(commissionEarnedCents(522_000, 4000, false), 41_760);
+  assert.equal(commissionEarnedCents(522_000, 4000, true), 52_200);   // own truck: 10%
+  assert.equal(commissionEarnedCents(522_000, 3800, false), 36_540);  // 38% margin: 7%
+  assert.equal(commissionEarnedCents(0, 4000, true), 0);
 });
 
 test("deposit: 50% over $5k or with special-order materials", () => {

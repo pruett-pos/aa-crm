@@ -80,7 +80,7 @@ Exit states: Lost (reason required), Cancelled after approval * (triggers cancel
 ## 7. Deposits and payments
 
 - 50% deposit required if contract total > $5,000 **or** any special-order material.
-- Estimators can record field payments (check/card) with photo of check.
+- Estimators can record field payments (check/card) with a photo of the check; office staff (admin, accounting) can record any payment, with the photo optional. Cards are taken in Helcim and recorded here with the Helcim transaction number: the CRM is record-only for cards and never stores card numbers.
 - All invoices and payments sync to QuickBooks Online.
 
 ## 8. Post-sale and production
@@ -160,3 +160,9 @@ outstanding depreciation, AR aging, commissions owed.
   - Choosing a package copies the price and deposit onto the job (deposit rule in `rules.ts`) and moves the job up to scope_presented. Editing the selected package voids the selection and any unsigned contract. A signed contract locks prices.
   - Contract terms and the consent text are DRAFT placeholders. They need review by an attorney before real customers sign.
   - Not yet handled: the FTC 3-day right-to-cancel notice for in-home sales, Missouri home-improvement and insurance-claim rules, and remote (emailed link) signing.
+- 2026-10 (slice 4, deposits and payments):
+  - Payments are recorded only after the contract is signed, and can never take total collected above the contract total. Payments are voided with a reason (admin or accounting), never deleted.
+  - Who sees amounts: admin, accounting, and the job's own estimator. Production Managers, CSRs and crew leaders do not (a PM sees the stage only).
+  - Deposit paid (payments marked deposit) >= required moves the job from contract_signed to deposit_collected. Voiding never moves a stage backward by itself; the screen warns instead.
+  - Commission earned so far = rate at the job's margin applied to non-voided payments collected (`commissionEarnedCents`), shown to the own estimator, admin and accounting. Payouts and draws are a later slice.
+  - Not yet handled: QuickBooks sync, a Helcim API link to verify or auto-record card payments, invoices, and commission on the separate retail upgrade scope of an insurance job.

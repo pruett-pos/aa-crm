@@ -46,6 +46,7 @@ export function ContractPanel({ jobId, canEdit, info }: { jobId: string; canEdit
                 <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">{en.contract.downloadSigned}</a>
                 {doc.signedAt && <span className="muted"> · {en.contract.signedOn(doc.signedAt.slice(0, 10))}</span>}
               </p>
+              {canEdit && <p><Link href={`/jobs/${jobId}/payments`}>{en.payments.recordLink}</Link></p>}
             </>
           )}
 

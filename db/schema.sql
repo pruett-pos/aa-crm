@@ -246,10 +246,19 @@ CREATE TABLE payments (
   is_deposit  boolean NOT NULL DEFAULT false,
   is_depreciation boolean NOT NULL DEFAULT false,
   collected_by uuid REFERENCES users(id),
-  check_photo_url text,
+  check_photo_url text,                       -- our authenticated photo route, not a public link
   qbo_payment_id text,
-  received_at timestamptz NOT NULL DEFAULT now()
+  received_at timestamptz NOT NULL DEFAULT now(),
+  reference   text,                           -- check number, or Helcim transaction number for cards
+  notes       text,
+  check_photo_data bytea,
+  check_photo_mime text,
+  voided_at   timestamptz,                    -- payments are voided, never deleted
+  voided_by   uuid REFERENCES users(id),
+  void_reason text,
+  CHECK ((voided_at IS NULL) = (void_reason IS NULL))
 );
+CREATE INDEX payments_job_idx ON payments (job_id);
 
 -- Commission ----------------------------------------------------------------
 CREATE TABLE commission_draws (

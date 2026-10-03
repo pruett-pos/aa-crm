@@ -3,19 +3,22 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/index.ts";
 import { getScopeStore } from "@/lib/scopes/index.ts";
 import { canReadScopes } from "@/lib/scopes/service.ts";
+import { canViewPayments } from "@/lib/payments/logic.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
 import { en } from "@/i18n/en.ts";
 
 export default async function JobsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!hasRole(user.role, ["admin", "estimator", "production_manager"])) redirect("/");
+  if (!hasRole(user.role, ["admin", "estimator", "production_manager", "accounting"])) redirect("/");
 
   const store = getScopeStore();
   const all = await store.listJobs();
   const visible = [];
   for (const j of all) {
-    if (canReadScopes(user, j, await store.divisionManagerIds(j.divisions))) visible.push(j);
+    const scopes = canReadScopes(user, j, await store.divisionManagerIds(j.divisions));
+    const payments = canViewPayments(user, j);
+    if (scopes || payments) visible.push({ j, scopes, payments });
   }
 
   return (
@@ -25,13 +28,15 @@ export default async function JobsPage() {
         <p className="muted">{en.jobs.empty}</p>
       ) : (
         <ul className="list">
-          {visible.map((j) => (
+          {visible.map(({ j, scopes, payments }) => (
             <li key={j.id}>
               <strong>{en.jobs.number} {j.jobNumber}</strong>{" "}
               <span className="muted">
                 {en.jobs.types[j.jobType]} · {j.divisions.join(", ").replaceAll("_", " ")} · {j.stage.replaceAll("_", " ")}
               </span>{" "}
-              <Link href={`/jobs/${j.id}/scope`}>{en.jobs.openScope}</Link>
+              {scopes && <Link href={`/jobs/${j.id}/scope`}>{en.jobs.openScope}</Link>}
+              {scopes && payments && " · "}
+              {payments && <Link href={`/jobs/${j.id}/payments`}>{en.payments.openPayments}</Link>}
             </li>
           ))}
         </ul>

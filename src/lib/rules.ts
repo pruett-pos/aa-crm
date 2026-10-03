@@ -96,6 +96,36 @@ export function depositRequiredCents(contractCents: number, hasSpecialOrder: boo
   return 0;
 }
 
+// ---------- Payments ----------
+export const PAYMENT_MAX_CENTS = 100_000_000; // $1,000,000 in one payment is surely a typo
+
+/** Deposit still owed after what has been paid toward it. Never negative. */
+export function depositDueCents(requiredCents: number, depositPaidCents: number): number {
+  return Math.max(0, requiredCents - depositPaidCents);
+}
+
+/** Contract total minus everything collected so far. Never negative. */
+export function balanceDueCents(contractCents: number, collectedCents: number): number {
+  return Math.max(0, contractCents - collectedCents);
+}
+
+/** True if recording this payment would take total collected above the contract total. */
+export function wouldOverpay(contractCents: number, collectedCents: number, amountCents: number): boolean {
+  return collectedCents + amountCents > contractCents;
+}
+
+/**
+ * Parse money typed by a person into whole cents, or null if it isn't a clean amount.
+ * Accepts "1234", "1,234.50", "$99.9". Never uses floating point.
+ */
+export function parseDollarsToCents(input: string): number | null {
+  const s = input.trim().replace(/^\$/, "");
+  if (!/^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(s)) return null;
+  const [whole, frac = ""] = s.replace(/,/g, "").split(".");
+  const cents = Number(whole) * 100 + Number(frac.padEnd(2, "0"));
+  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+}
+
 // ---------- Pruett pricing ----------
 export const PRUETT_PLANS_BPS = {
   contractor: 700, contractor2: 300, builder: 1200, wholesale: 1800,

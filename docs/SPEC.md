@@ -142,3 +142,15 @@ outstanding depreciation, AR aging, commissions owed.
      customer-paid difference.
   4. Production Managers can see margin (updates the Scopes rule in section 5 and the roles table).
   5. E-signature vendor = Dropbox Sign. Build under `src/integrations/dropbox-sign/`.
+- 2026-10 (slice 2, scope builder):
+  - Customer price is set by a per-scope target margin (default 40%, max 95%):
+    price = cost / (1 - target), rounded per line. Actual margin is always displayed.
+    Rules: `priceForTargetMarginCents`, `scopeTotals`, `scopeCommissionRateBps` in `rules.ts`.
+  - Materials cost the Pruett Builder price (retail - 12%). Until the nightly sync exists,
+    `db/seed_products.sql` provides a fake sample catalog. Labor and other lines take a typed cost.
+  - The server computes all prices; the client never sends a price.
+  - Scope access: admin and the job's own estimator can edit. A Production Manager can read
+    (with margin) their division's jobs from `contract_signed` onward. Commission preview shows
+    only to admin and the job's own estimator.
+  - ASSUMPTION to confirm: PM-to-division matching uses `division_managers` for the job's
+    divisions in any market (seed data has the siding PM in west_plains and the siding job in springfield).

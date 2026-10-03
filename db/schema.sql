@@ -172,6 +172,8 @@ CREATE TABLE scopes (
   tier        package_tier NOT NULL,
   title       text NOT NULL,           -- e.g. "Malarkey Highlander"
   sale_cents  bigint NOT NULL DEFAULT 0,
+  cost_cents  bigint NOT NULL DEFAULT 0,        -- recomputed by the server via rules.ts
+  target_margin_bps integer NOT NULL DEFAULT 4000 CHECK (target_margin_bps BETWEEN 0 AND 9500),
   selected    boolean NOT NULL DEFAULT false,
   created_at  timestamptz NOT NULL DEFAULT now(),
   UNIQUE (job_id, tier)
@@ -181,6 +183,8 @@ CREATE UNIQUE INDEX one_selected_scope ON scopes (job_id) WHERE selected;
 CREATE TABLE scope_items (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   scope_id    uuid NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
+  kind        text NOT NULL DEFAULT 'material' CHECK (kind IN ('material','labor','misc')),
+  sort_order  integer NOT NULL DEFAULT 0,
   product_id  uuid REFERENCES products(id),  -- null for labor / misc
   description text NOT NULL,
   quantity    numeric(12,2) NOT NULL,

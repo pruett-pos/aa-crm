@@ -1,5 +1,4 @@
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../generated/prisma/client.ts";
+import type { PrismaClient } from "../../generated/prisma/client.ts";
 import type { AuthStore, AuthUser } from "./store.ts";
 
 type DbUser = { id: string; fullName: string; email: string; role: AuthUser["role"]; active: boolean };
@@ -8,8 +7,7 @@ function toAuthUser(u: DbUser | null): AuthUser | null {
   return u && { id: u.id, fullName: u.fullName, email: u.email, role: u.role, active: u.active };
 }
 
-export function createPrismaAuthStore(connectionString: string): AuthStore {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+export function createPrismaAuthStore(db: PrismaClient): AuthStore {
   return {
     async findUserByEmail(email) {
       return toAuthUser(await db.user.findUnique({ where: { email } }));

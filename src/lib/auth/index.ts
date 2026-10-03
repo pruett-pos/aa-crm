@@ -3,6 +3,7 @@ import { getSessionUser } from "./core.ts";
 import { MemoryAuthStore, type AuthStore, type AuthUser } from "./store.ts";
 import { hasRole, type Role } from "./roles.ts";
 import { createPrismaAuthStore } from "./prisma-store.ts";
+import { getDb } from "../db.ts";
 
 export const SESSION_COOKIE = "aa_session";
 
@@ -12,7 +13,7 @@ const g = globalThis as unknown as { __aaAuthStore?: AuthStore };
 export function getStore(): AuthStore {
   if (g.__aaAuthStore) return g.__aaAuthStore;
   if (process.env.DATABASE_URL) {
-    g.__aaAuthStore = createPrismaAuthStore(process.env.DATABASE_URL);
+    g.__aaAuthStore = createPrismaAuthStore(getDb());
     return g.__aaAuthStore;
   }
   if (process.env.NODE_ENV === "production") {

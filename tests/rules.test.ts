@@ -4,6 +4,7 @@ import {
   grossMarginBps, commissionRateBps, commissionEarnedCents,
   contingencyFeeCents, cancellationFeeCents, depositRequiredCents,
   pruettPriceCents, routeCall, stagesFor, nextStage,
+  priceForTargetMarginCents, scopeTotals, scopeCommissionRateBps,
 } from "../src/lib/rules.ts";
 
 test("gross margin", () => {
@@ -49,6 +50,38 @@ test("upgrade scope earns retail commission on its own margin", () => {
   const margin = grossMarginBps(500_000, 310_000);
   assert.equal(margin, 3800);
   assert.equal(commissionEarnedCents(500_000, margin, false), 35_000);
+});
+
+test("scope pricing: target margin sets price = cost / (1 - target)", () => {
+  assert.equal(priceForTargetMarginCents(60_000, 4000), 100_000); // $600 cost -> $1,000 at 40%
+  assert.equal(priceForTargetMarginCents(60_000, 0), 60_000);     // 0% target: price = cost
+  assert.equal(priceForTargetMarginCents(0, 4000), 0);
+  assert.throws(() => priceForTargetMarginCents(60_000, 9600));
+  assert.throws(() => priceForTargetMarginCents(60_000, -1));
+  assert.throws(() => priceForTargetMarginCents(60_000, 3999.5));
+});
+
+test("scope totals: sums lines and reports gross margin", () => {
+  const lines = [
+    { quantity: 10, unitCostCents: 3_000, unitPriceCents: 5_000 },   // $300 / $500
+    { quantity: 2.5, unitCostCents: 12_000, unitPriceCents: 20_000 }, // $300 / $500
+  ];
+  assert.deepEqual(scopeTotals(lines), { costCents: 60_000, saleCents: 100_000, marginBps: 4000 });
+  assert.deepEqual(scopeTotals([]), { costCents: 0, saleCents: 0, marginBps: 0 });
+});
+
+test("scope totals: fractional quantities round per line", () => {
+  const t = scopeTotals([{ quantity: 0.333, unitCostCents: 1_000, unitPriceCents: 1_667 }]);
+  assert.equal(t.costCents, 333);
+  assert.equal(t.saleCents, 555);
+});
+
+test("scope commission preview: 40% pays 8%, 38% pays 7%, 39% still 8%", () => {
+  const at = (marginBps: number) => scopeCommissionRateBps({ costCents: 0, saleCents: 0, marginBps }, false);
+  assert.equal(at(4000), 800);
+  assert.equal(at(3900), 800);
+  assert.equal(at(3800), 700);
+  assert.equal(scopeCommissionRateBps({ costCents: 0, saleCents: 0, marginBps: 4000 }, true), 1000);
 });
 
 test("deposit: 50% over $5k or with special-order materials", () => {

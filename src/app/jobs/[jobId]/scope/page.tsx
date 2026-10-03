@@ -1,0 +1,34 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/index.ts";
+import { getScopeStore } from "@/lib/scopes/index.ts";
+import { loadScopeData } from "@/lib/scopes/load.ts";
+import { hasRole } from "@/lib/auth/roles.ts";
+import { en } from "@/i18n/en.ts";
+import { ScopeBuilder } from "./scope-builder.tsx";
+
+export default async function ScopePage({ params }: { params: Promise<{ jobId: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!hasRole(user.role, ["admin", "estimator", "production_manager"])) redirect("/");
+
+  const { jobId } = await params;
+  const data = await loadScopeData(getScopeStore(), user, jobId);
+  if (data.status === "not_found") notFound();
+  if (data.status === "forbidden") redirect("/jobs");
+
+  return (
+    <>
+      <p><Link href="/jobs">{en.jobs.back}</Link></p>
+      <h1>{en.scope.title(data.job.jobNumber)}</h1>
+      <ScopeBuilder
+        jobId={data.job.id}
+        canEdit={data.canEdit}
+        role={data.viewerRole}
+        commissionOwnTruck={data.commissionOwnTruck}
+        products={data.products}
+        initial={data.scopes}
+      />
+    </>
+  );
+}

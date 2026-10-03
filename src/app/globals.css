@@ -33,3 +33,25 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
   padding: 0.125rem 0.625rem; border-radius: 999px; font-weight: 600; font-size: 0.875rem;
 }
 a { color: var(--navy); }
+
+main { max-width: 56rem; }
+.list { padding-left: 1.25rem; } .list li { margin: 0.5rem 0; }
+.tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.tab { margin: 0; background: transparent; color: var(--navy); border: 1px solid var(--navy); }
+.tab.on { background: var(--navy); color: #fff; }
+.grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+table.lines { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+table.lines th { text-align: left; font-size: 0.875rem; color: #5c5a54; padding: 0.25rem; }
+table.lines td { padding: 0.25rem; vertical-align: middle; }
+table.lines select, table.lines input { padding: 0.375rem 0.5rem; }
+.row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem; }
+.row button { margin-top: 0; }
+button.small { padding: 0.25rem 0.625rem; font-size: 0.875rem; }
+.panel { margin-top: 1.25rem; padding: 1rem; background: #fff; border: 1px solid #d9d4c7; border-left: 4px solid var(--brass); border-radius: 6px; }
+.panel h2 { margin: 0 0 0.5rem; font-size: 1.125rem; color: var(--navy); }
+.panel dl { margin: 0; display: grid; gap: 0.25rem; }
+.panel dl div { display: flex; justify-content: space-between; }
+.panel dt { color: #5c5a54; } .panel dd { margin: 0; font-weight: 600; }
+.warn { color: #9b1c1c; }
+.small-text { font-size: 0.8125rem; }
+select { width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #b9b4a8; border-radius: 6px; background: #fff; font-size: 1rem; }

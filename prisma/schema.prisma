@@ -60,3 +60,129 @@ model Session {
   @@index([userId])
   @@map("sessions")
 }
+
+enum Division {
+  roofing
+  siding
+  gutters
+  windows_doors
+  insulation
+  spray_foam
+  commercial
+
+  @@map("division")
+}
+
+enum Market {
+  west_plains
+  springfield
+  nw_arkansas
+
+  @@map("market")
+}
+
+enum JobStage {
+  new_lead
+  appointment_set
+  inspected
+  contingency_signed
+  claim_approved
+  scope_presented
+  contract_signed
+  deposit_collected
+  materials_ordered
+  scheduled
+  in_production
+  closeout_punchlist
+  invoiced
+  depreciation_pending
+  paid_in_full
+  lost
+  cancelled_after_approval
+
+  @@map("job_stage")
+}
+
+enum PackageTier {
+  good
+  better
+  best
+
+  @@map("package_tier")
+}
+
+// Read-only slice of jobs: only the columns scope access checks need.
+enum JobType {
+  retail
+  insurance
+  condition_report
+
+  @@map("job_type")
+}
+
+model Job {
+  id                  String     @id @default(uuid()) @db.Uuid
+  jobNumber           Int        @unique @default(autoincrement()) @map("job_number")
+  jobType             JobType    @map("job_type")
+  divisions           Division[]
+  stage               JobStage
+  estimatorId         String?    @map("estimator_id") @db.Uuid
+  productionManagerId String?    @map("production_manager_id") @db.Uuid
+  scopes              Scope[]
+
+  @@map("jobs")
+}
+
+model DivisionManager {
+  division Division
+  market   Market
+  userId   String   @map("user_id") @db.Uuid
+
+  @@id([division, market])
+  @@map("division_managers")
+}
+
+model Product {
+  id           String  @id @default(uuid()) @db.Uuid
+  pruettSku    String  @unique @map("pruett_sku")
+  name         String
+  unit         String
+  retailCents  BigInt  @map("retail_cents")
+  specialOrder Boolean @default(false) @map("special_order")
+  items        ScopeItem[]
+
+  @@map("products")
+}
+
+model Scope {
+  id              String      @id @default(uuid()) @db.Uuid
+  jobId           String      @map("job_id") @db.Uuid
+  tier            PackageTier
+  title           String
+  saleCents       BigInt      @default(0) @map("sale_cents")
+  costCents       BigInt      @default(0) @map("cost_cents")
+  targetMarginBps Int         @default(4000) @map("target_margin_bps")
+  selected        Boolean     @default(false)
+  job             Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  items           ScopeItem[]
+
+  @@unique([jobId, tier])
+  @@map("scopes")
+}
+
+model ScopeItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  scopeId        String   @map("scope_id") @db.Uuid
+  kind           String   @default("material")
+  sortOrder      Int      @default(0) @map("sort_order")
+  productId      String?  @map("product_id") @db.Uuid
+  description    String
+  quantity       Decimal  @db.Decimal(12, 2)
+  unitCostCents  BigInt   @map("unit_cost_cents")
+  unitPriceCents BigInt   @map("unit_price_cents")
+  color          String?
+  scope          Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  product        Product? @relation(fields: [productId], references: [id])
+
+  @@map("scope_items")
+}

@@ -37,6 +37,37 @@ export function commissionEarnedCents(
   return Math.round((collectedCents * commissionRateBps(marginBps, ownTruck)) / 10000);
 }
 
+// ---------- Scope of work pricing ----------
+export const SCOPE_DEFAULT_TARGET_MARGIN_BPS = 4000; // 40%
+export const SCOPE_MAX_TARGET_MARGIN_BPS = 9500;     // 95%: keeps price finite and sane
+
+/** Customer price for a cost at a target gross margin: cost / (1 - target). */
+export function priceForTargetMarginCents(costCents: number, targetBps: number): number {
+  if (!Number.isInteger(targetBps) || targetBps < 0 || targetBps > SCOPE_MAX_TARGET_MARGIN_BPS) {
+    throw new RangeError(`Target margin must be 0 to ${SCOPE_MAX_TARGET_MARGIN_BPS} bps`);
+  }
+  return Math.round((costCents * 10000) / (10000 - targetBps));
+}
+
+export type ScopeLine = { quantity: number; unitCostCents: number; unitPriceCents: number };
+export type ScopeTotals = { costCents: number; saleCents: number; marginBps: number };
+
+/** Totals for a scope. Each line rounds to whole cents before summing. */
+export function scopeTotals(lines: ScopeLine[]): ScopeTotals {
+  let costCents = 0;
+  let saleCents = 0;
+  for (const l of lines) {
+    costCents += Math.round(l.quantity * l.unitCostCents);
+    saleCents += Math.round(l.quantity * l.unitPriceCents);
+  }
+  return { costCents, saleCents, marginBps: grossMarginBps(saleCents, costCents) };
+}
+
+/** Commission rate the estimator would earn if this scope sells as priced. */
+export function scopeCommissionRateBps(totals: ScopeTotals, ownTruck: boolean): number {
+  return commissionRateBps(totals.marginBps, ownTruck);
+}
+
 // ---------- Insurance contingency ----------
 export const CONTINGENCY_FEE_BPS = 1000;   // 10% of insurance paid so far
 export const CANCELLATION_FEE_BPS = 500;   // 5% of payout if homeowner walks after approval

@@ -1,9 +1,11 @@
-// Thin CompanyCam client (API v2). Everything CompanyCam-specific lives in this folder so that moving to
-// CompanyCam's newer API later only touches here. Never import this from UI code; go through the API routes.
+// Thin CompanyCam client (current public API, /public_api/v1). Everything CompanyCam-specific lives in this folder.
+// Never import this from UI code; go through the API routes.
 //
-// NOTE: CompanyCam says v2 is retiring in early 2027. Plan a migration before then.
+// Responses come in an envelope { data, errors, meta }; lists page with a cursor (limit / after).
+// Not documented in CompanyCam's published API file, so not assumed: rate limits, Retry-After (honored if sent),
+// whether image URLs expire, and how many different project status values exist.
 
-const DEFAULT_BASE = "https://api.companycam.com/v2";
+const DEFAULT_BASE = "https://app.companycam.com/public_api/v1";
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 export type IntegrationLog = (e: { status: "ok" | "error"; payload?: unknown; error?: string }) => Promise<void>;
@@ -25,6 +27,7 @@ export type CcProject = {
   id: string;
   name: string | null;
   projectUrl: string | null;
+  /** "archived" or "deleted" when CompanyCam says so, otherwise "active". */
   status: string;
   address: { street: string | null; city: string | null; state: string | null; postalCode: string | null };
 };
@@ -32,7 +35,6 @@ export type CcPhoto = { id: string; thumbnailUrl: string | null; capturedAt: str
 
 export type CompanyCamConfig = {
   token: string;
-  userEmail?: string | null;
   baseUrl?: string;
   timeoutMs?: number;
   fetch?: FetchLike;
@@ -43,7 +45,7 @@ export type CompanyCamConfig = {
 export function companyCamConfigFromEnv(env: Record<string, string | undefined> = process.env): Omit<CompanyCamConfig, "fetch" | "log"> | null {
   const token = env.COMPANYCAM_ACCESS_TOKEN?.trim();
   if (!token) return null;
-  return { token, userEmail: env.COMPANYCAM_USER_EMAIL?.trim() || null, baseUrl: env.COMPANYCAM_API_BASE?.trim() || undefined };
+  return { token, baseUrl: env.COMPANYCAM_API_BASE?.trim() || undefined };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -55,8 +57,10 @@ function normalizeProject(j: any): CcProject {
   const id = j?.id === undefined || j?.id === null ? "" : String(j.id);
   if (!id) throw new CompanyCamError("server", "Unexpected response from CompanyCam");
   const a = j.address ?? {};
+  const raw = typeof j.status === "string" ? j.status.toLowerCase() : "";
+  const status = j.archived === true || raw.includes("archiv") ? "archived" : raw.includes("delet") ? "deleted" : "active";
   return {
-    id, name: str(j.name), projectUrl: str(j.project_url), status: typeof j.status === "string" ? j.status : "active",
+    id, name: str(j.name), projectUrl: str(j.project_url), status,
     address: { street: str(a.street_address_1), city: str(a.city), state: str(a.state), postalCode: str(a.postal_code) },
   };
 }
@@ -83,13 +87,13 @@ export function createCompanyCamClient(cfg: CompanyCamConfig) {
   // Logging is best effort: a logging problem must never change the outcome of a CompanyCam call.
   const log: IntegrationLog = async (e) => { try { await cfg.log?.(e); } catch { /* ignore */ } };
 
-  async function call(method: "GET" | "POST", path: string, opts: { query?: Record<string, string | number>; body?: unknown } = {}): Promise<any> {
+  /** Returns the envelope's `data` and `meta`. */
+  async function call(method: "GET" | "POST", path: string, opts: { query?: Record<string, string | number>; body?: unknown } = {}): Promise<{ data: any; meta: any }> {
     const qs = opts.query ? `?${new URLSearchParams(Object.entries(opts.query).map(([k, v]) => [k, String(v)])).toString()}` : "";
     const headers: Record<string, string> = { Authorization: `Bearer ${cfg.token}`, Accept: "application/json" };
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-    if (cfg.userEmail && method === "POST") headers["X-CompanyCam-User"] = cfg.userEmail;
-    // The log records the endpoint path only: no token, no query (which can hold an address), no body.
-    const endpoint = `${method} ${path.replace(/\/[0-9]+(?=\/|$)/g, "/:id")}`;
+    // The log records the endpoint path only: no token, no query (which can hold an address), no body, no project id.
+    const endpoint = `${method} ${path.replace(/^\/projects\/(?!search(?:\/|$))[^/]+/, "/projects/:id")}`;
 
     let res: Response;
     try {
@@ -103,44 +107,53 @@ export function createCompanyCamClient(cfg: CompanyCamConfig) {
     if (!res.ok) {
       const retry = Number(res.headers.get("retry-after"));
       const kind: CompanyCamErrorKind =
-        res.status === 401 || res.status === 403 ? "auth"
+        res.status === 401 || res.status === 403 ? "auth"   // invalid_token, token_expired, token_revoked, insufficient_scope
         : res.status === 404 ? "not_found"
         : res.status === 429 ? "rate_limited"
         : res.status >= 500 ? "server" : "bad_request";
       await log({ status: "error", payload: { endpoint, httpStatus: res.status }, error: kind });
       throw new CompanyCamError(kind, `CompanyCam returned HTTP ${res.status}`, Number.isFinite(retry) && retry > 0 ? retry : null);
     }
-    await log({ status: "ok", payload: { endpoint, httpStatus: res.status } });
+    let body: any;
     try {
-      return await res.json();
+      body = await res.json();
     } catch {
+      await log({ status: "error", payload: { endpoint, httpStatus: res.status }, error: "server" });
       throw new CompanyCamError("server", "Unexpected response from CompanyCam");
     }
+    // A 200 whose envelope carries errors, or has no data, is a failure too.
+    if (!body || typeof body !== "object" || body.data === undefined || body.data === null || (Array.isArray(body.errors) && body.errors.length > 0)) {
+      await log({ status: "error", payload: { endpoint, httpStatus: res.status }, error: "server" });
+      throw new CompanyCamError("server", "Unexpected response from CompanyCam");
+    }
+    await log({ status: "ok", payload: { endpoint, httpStatus: res.status } });
+    return { data: body.data, meta: body.meta ?? {} };
   }
 
   return {
     async createProject(a: { name: string; address: CcAddress; contactName?: string | null }): Promise<CcProject> {
-      const body: Record<string, unknown> = {
-        name: a.name,
-        address: { street_address_1: a.address.street, city: a.address.city, state: a.address.state, postal_code: a.address.postalCode, country: "US" },
+      const project: Record<string, unknown> = {
+        name: a.name, street_address_1: a.address.street, city: a.address.city, state: a.address.state,
+        postal_code: a.address.postalCode, country: "US",
       };
-      if (a.contactName) body.primary_contact = { name: a.contactName };
-      return normalizeProject(await call("POST", "/projects", { body }));
+      if (a.contactName) project.primary_contact = { name: a.contactName };
+      return normalizeProject((await call("POST", "/projects", { body: { project } })).data);
     },
 
-    /** CompanyCam matches the query against project name or address line 1. Active projects only. */
-    async searchProjects(query: string, perPage = 25): Promise<CcProject[]> {
-      const j = await call("GET", "/projects", { query: { query, status: "active", per_page: perPage } });
-      return (Array.isArray(j) ? j : []).map(normalizeProject);
+    /** Matches the query against project name and address. Includes archived projects; callers filter on `status`. */
+    async searchProjects(query: string): Promise<CcProject[]> {
+      const { data } = await call("GET", "/projects/search", { query: { query } });
+      return (Array.isArray(data) ? data : []).map(normalizeProject);
     },
 
     async getProject(id: string): Promise<CcProject> {
-      return normalizeProject(await call("GET", `/projects/${encodeURIComponent(id)}`));
+      return normalizeProject((await call("GET", `/projects/${encodeURIComponent(id)}`)).data);
     },
 
-    async listPhotos(projectId: string, perPage = 100): Promise<CcPhoto[]> {
-      const j = await call("GET", `/projects/${encodeURIComponent(projectId)}/photos`, { query: { per_page: perPage } });
-      return (Array.isArray(j) ? j : []).map(normalizePhoto);
+    /** One page of photos (at most 100), with whether CompanyCam has more. */
+    async listPhotos(projectId: string, limit = 100): Promise<{ photos: CcPhoto[]; hasMore: boolean }> {
+      const { data, meta } = await call("GET", `/projects/${encodeURIComponent(projectId)}/photos`, { query: { limit: Math.min(100, Math.max(1, limit)) } });
+      return { photos: (Array.isArray(data) ? data : []).map(normalizePhoto), hasMore: meta?.has_next === true };
     },
   };
 }

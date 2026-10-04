@@ -58,7 +58,7 @@ export async function ensureProject(
     if (!job) return { status: "skipped", reason: peek.attempts >= MAX_ATTEMPTS && !opts.force ? "gave_up" : "busy" };
 
     try {
-      const found = (await client.searchProjects(streetSearchWord(job.street), 100)).filter((p) => p.status === "active" && sameAddress(p.address, job));
+      const found = (await client.searchProjects(streetSearchWord(job.street))).filter((p) => p.status === "active" && sameAddress(p.address, job));
       const free: CcProject[] = [];
       for (const p of found) if ((await store.projectOwner(p.id)) === null) free.push(p);
       if (free.length === 1) {
@@ -146,7 +146,7 @@ export async function searchForLink(
     throw new ManageError("service_error");
   }
   const out = [];
-  for (const p of found.slice(0, 20)) {
+  for (const p of found.filter((x) => x.status === "active").slice(0, 20)) {
     out.push({
       id: p.id, name: p.name, url: p.projectUrl, linkedToJob: (await store.projectOwner(p.id)) !== null,
       address: [p.address.street, p.address.city, p.address.state, p.address.postalCode].filter(Boolean).join(", "),
@@ -173,7 +173,7 @@ export type PhotosView =
   | { state: "ok"; projectUrl: string | null; count: number; hasMore: boolean; photos: { id: string; thumbnailUrl: string; capturedAt: string | null; creatorName: string | null }[] };
 
 const CACHE_MS = 60_000;
-const cache = new Map<string, { at: number; photos: CcPhoto[] }>();
+const cache = new Map<string, { at: number; photos: CcPhoto[]; hasMore: boolean }>();
 export function clearPhotoCache() { cache.clear(); }
 
 /** The newest few thumbnails, fetched live (cached about a minute) and never stored. */
@@ -184,11 +184,12 @@ export async function photosFor(
   if (job.status !== "linked" || !job.projectId) return { state: "not_linked", status: job.status, error: job.error };
   const hit = cache.get(job.projectId);
   let photos: CcPhoto[];
-  if (hit && now() - hit.at < CACHE_MS) photos = hit.photos;
+  let hasMore: boolean;
+  if (hit && now() - hit.at < CACHE_MS) ({ photos, hasMore } = hit);
   else {
     try {
-      photos = await client.listPhotos(job.projectId, 100);
-      cache.set(job.projectId, { at: now(), photos });
+      ({ photos, hasMore } = await client.listPhotos(job.projectId, 100));
+      cache.set(job.projectId, { at: now(), photos, hasMore });
     } catch (e) {
       return { state: "error", kind: e instanceof CompanyCamError ? e.kind : "server", projectUrl: job.projectUrl };
     }
@@ -197,5 +198,5 @@ export async function photosFor(
     .sort((a, b) => (b.capturedAt ?? "").localeCompare(a.capturedAt ?? ""))
     .flatMap((p) => (p.thumbnailUrl ? [{ id: p.id, thumbnailUrl: p.thumbnailUrl, capturedAt: p.capturedAt, creatorName: p.creatorName }] : []))
     .slice(0, 8);
-  return { state: "ok", projectUrl: job.projectUrl, count: photos.length, hasMore: photos.length >= 100, photos: newest };
+  return { state: "ok", projectUrl: job.projectUrl, count: photos.length, hasMore, photos: newest };
 }

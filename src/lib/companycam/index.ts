@@ -10,7 +10,7 @@ export function getCompanyCamStore(): CompanyCamStore {
   return (g.__aaCcStore ??= createPrismaCompanyCamStore(getDb()));
 }
 
-/** The CompanyCam client, or null when no access token is configured (the feature then just shows "not connected"). */
+/** The CompanyCam client (current public API), or null when no access token is configured (the feature then just shows "not connected"). */
 export function getCompanyCamClient(): CompanyCamClient | null {
   if (g.__aaCcClient !== undefined) return g.__aaCcClient;
   const cfg = companyCamConfigFromEnv();

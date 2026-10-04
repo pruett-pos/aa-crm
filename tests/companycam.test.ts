@@ -9,40 +9,48 @@ import {
 import { MemoryCompanyCamStore } from "../src/lib/companycam/memory-store.ts";
 import type { Actor, ProductionJob, TradeRow } from "../src/lib/production/types.ts";
 
-// ---------- a fake CompanyCam server with real state ----------
-type Fp = { id: string; name: string | null; project_url: string; status: string; address: { street_address_1: string; city: string; state: string; postal_code: string } };
+// ---------- a fake CompanyCam server (current public API shapes) with real state ----------
+type Fp = { id: string; name: string | null; project_url: string; status: string; archived: boolean; address: { street_address_1: string; city: string; state: string; postal_code: string } };
 function server() {
   const projects: Fp[] = [];
   const photos = new Map<string, unknown[]>();
-  const requests: { method: string; path: string; body?: unknown }[] = [];
+  const requests: { method: string; path: string; query: string; body?: unknown }[] = [];
   let nextId = 5000;
   let failures: { status: number; headers?: Record<string, string> }[] = [];
   let networkDown = false;
   const j = (b: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json", ...headers } });
+  const ok = (data: unknown, status = 200, meta: unknown = {}) => j({ data, errors: [], meta }, status);
   const f: FetchLike = async (url, init = {}) => {
     if (networkDown) throw new Error("ECONNREFUSED");
     const u = new URL(url);
     const method = init.method ?? "GET";
     const body = init.body ? JSON.parse(init.body as string) : undefined;
-    requests.push({ method, path: u.pathname.replace("/v2", ""), body });
+    const path = u.pathname.replace("/public_api/v1", "");
+    requests.push({ method, path, query: u.search, body });
     const fail = failures.shift();
-    if (fail) return j({ error: "boom" }, fail.status, fail.headers);
-    const path = u.pathname.replace("/v2", "");
+    if (fail) return j({ data: {}, errors: [{ code: "boom" }], meta: {} }, fail.status, fail.headers);
     if (method === "POST" && path === "/projects") {
+      const b = body.project;
       const p: Fp = {
-        id: String(nextId++), name: body.name, project_url: `https://app.companycam.com/projects/${nextId - 1}`, status: "active", address: body.address,
+        id: String(nextId++), name: b.name, project_url: `https://app.companycam.com/projects/${nextId - 1}`, status: "active", archived: false,
+        address: { street_address_1: b.street_address_1, city: b.city, state: b.state, postal_code: b.postal_code },
       };
       projects.push(p);
-      return j(p, 201);
+      return ok(p, 201);
     }
-    if (method === "GET" && path === "/projects") {
+    if (method === "GET" && path === "/projects/search") {
       const q = (u.searchParams.get("query") ?? "").toLowerCase();
-      return j(projects.filter((p) => p.status === "active" && ((p.name ?? "").toLowerCase().includes(q) || p.address.street_address_1.toLowerCase().includes(q))));
+      // like the real one, this includes archived projects
+      return ok(projects.filter((p) => (p.name ?? "").toLowerCase().includes(q) || p.address.street_address_1.toLowerCase().includes(q)));
     }
     const photoMatch = path.match(/^\/projects\/([^/]+)\/photos$/);
-    if (photoMatch) return j(photos.get(decodeURIComponent(photoMatch[1])) ?? []);
+    if (photoMatch) {
+      const all = photos.get(decodeURIComponent(photoMatch[1])) ?? [];
+      const limit = Number(u.searchParams.get("limit") ?? 50);
+      return ok(all.slice(0, limit), 200, { has_next: all.length > limit, next_cursor: all.length > limit ? "next" : null });
+    }
     const one = path.match(/^\/projects\/([^/]+)$/);
-    if (one) { const p = projects.find((x) => x.id === decodeURIComponent(one[1])); return p ? j(p) : j({}, 404); }
+    if (one) { const p = projects.find((x) => x.id === decodeURIComponent(one[1])); return p ? ok(p) : j({ data: {}, errors: [{ code: "not_found" }], meta: {} }, 404); }
     return j({}, 404);
   };
   return {
@@ -51,7 +59,7 @@ function server() {
     down: (v: boolean) => { networkDown = v; },
     count: (method: string, path: string) => requests.filter((r) => r.method === method && r.path === path).length,
     addProject: (street: string, zip: string, over: Partial<Fp> = {}): Fp => {
-      const p: Fp = { id: String(nextId++), name: "Existing", project_url: `https://app.companycam.com/projects/${nextId - 1}`, status: "active", address: { street_address_1: street, city: "West Plains", state: "MO", postal_code: zip }, ...over };
+      const p: Fp = { id: String(nextId++), name: "Existing", project_url: `https://app.companycam.com/projects/${nextId - 1}`, status: "active", archived: false, address: { street_address_1: street, city: "West Plains", state: "MO", postal_code: zip }, ...over };
       projects.push(p);
       return p;
     },
@@ -99,10 +107,14 @@ test("a new job gets a project: created with the name, address and contact, then
   const job = store.add({ jobNumber: 24, divisions: ["roofing", "siding"] });
   const r = await ensureProject(store, client, job.id, { now: at(0) });
   assert.equal(r.status, "linked");
-  assert.deepEqual(srv.requests.map((x) => `${x.method} ${x.path}`), ["GET /projects", "POST /projects"]);
-  const created = srv.requests[1].body as { name: string; address: Record<string, string>; primary_contact: { name: string } };
+  assert.deepEqual(srv.requests.map((x) => `${x.method} ${x.path}`), ["GET /projects/search", "POST /projects"]);
+  assert.equal(new URLSearchParams(srv.requests[0].query).get("query"), "example");      // the street-name word, so spelling variants are found
+  const sent = srv.requests[1].body as { project: Record<string, unknown> };
+  const created = sent.project;
   assert.equal(created.name, "Miller, Dana - Job 24 - Roofing + Siding");
-  assert.deepEqual(created.address, { street_address_1: "100 Example Rd", city: "West Plains", state: "MO", postal_code: "65775", country: "US" });
+  assert.deepEqual({ ...created, name: undefined, primary_contact: undefined }, {
+    street_address_1: "100 Example Rd", city: "West Plains", state: "MO", postal_code: "65775", country: "US", name: undefined, primary_contact: undefined,
+  });
   assert.deepEqual(created.primary_contact, { name: "Dana Miller" });
   const saved = store.jobs[0];
   assert.deepEqual([saved.status, saved.linkMethod, saved.attempts, saved.error], ["linked", "created", 0, null]);
@@ -143,6 +155,23 @@ test("an existing project at the same address is linked instead of creating a du
   assert.deepEqual(r, { status: "linked", method: "auto_match", projectId: existing.id });
   assert.equal(srv.count("POST", "/projects"), 0);
   assert.equal(store.jobs[0].linkMethod, "auto_match");
+});
+
+test("archived and deleted projects are never matched, and a new one is created instead", async () => {
+  const { srv, client, store } = setup();
+  srv.addProject("100 Example Rd", "65775", { archived: true });
+  srv.addProject("100 Example Road", "65775", { status: "deleted" });
+  const r = await ensureProject(store, client, store.add().id, { now: at(0) });
+  assert.equal(r.status === "linked" && r.method, "created");
+  assert.equal(srv.count("POST", "/projects"), 1);
+});
+
+test("a live project is matched even when archived duplicates sit beside it", async () => {
+  const { srv, client, store } = setup();
+  srv.addProject("100 Example Rd", "65775", { archived: true });
+  const live = srv.addProject("100 Example Rd", "65775");
+  const r = await ensureProject(store, client, store.add().id, { now: at(0) });
+  assert.deepEqual(r, { status: "linked", method: "auto_match", projectId: live.id });
 });
 
 test("no match, several matches, a different zip, or a match another job owns: a new project is created", async () => {
@@ -340,7 +369,10 @@ test("search to link: short queries return nothing; projects other jobs own are 
   store.add({ status: "linked", projectId: a.id });
   assert.deepEqual(await searchForLink(store, client, "12"), []);
   const r = await searchForLink(store, client, "12 Maple");
-  assert.deepEqual(r.map((x) => [x.id, x.linkedToJob]), [[a.id, true], [b.id, false]]);
+  srv.addProject("12 Maple Lane", "65775", { archived: true });                 // archived projects are not offered for linking
+  const r2 = await searchForLink(store, client, "12 Maple");
+  assert.deepEqual(r2.map((x) => [x.id, x.linkedToJob]), [[a.id, true], [b.id, false]]);
+  assert.deepEqual(r.map((x) => [x.id, x.linkedToJob]).slice(0, 2), [[a.id, true], [b.id, false]]);
   assert.match(r[0].address, /12 Maple St, West Plains, MO, 65775/);
   await assert.rejects(() => searchForLink(store, null, "12 Maple"), (e: ManageError) => e.code === "not_configured");
   srv.failNext(500);
@@ -377,7 +409,7 @@ test("photos: the newest eight thumbnails, count, never an original, none for un
 test("photos: cached for a minute, then refreshed; a full page says there are more", async () => {
   clearPhotoCache();
   const { srv, client } = setup();
-  srv.photos.set("7002", Array.from({ length: 100 }, (_, i) => photo(`p${i}`, "2026-10-01T12:00:00Z", `https://img/t${i}`)));
+  srv.photos.set("7002", Array.from({ length: 101 }, (_, i) => photo(`p${i}`, "2026-10-01T12:00:00Z", `https://img/t${i}`)));
   let clock = 1_000_000;
   const now = () => clock;
   const first = await photosFor(client, linked("7002"), now);

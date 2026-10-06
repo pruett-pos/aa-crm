@@ -46,6 +46,7 @@ export default async function HomePage() {
           {user.role === "admin" && <li><Link href="/settings/commission">{en.commission.navSchedule}</Link></li>}
         </ul>
       )}
+      {user.role === "admin" && <p><Link href="/settings/hover">{en.hover.title}</Link></p>}
       {hasRole(user.role, ["admin", "estimator", "production_manager", "accounting"]) && (
         <p><Link href="/jobs">{en.jobs.navLabel}</Link></p>
       )}

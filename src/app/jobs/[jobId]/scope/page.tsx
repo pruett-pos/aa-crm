@@ -9,6 +9,7 @@ import { hasRole } from "@/lib/auth/roles.ts";
 import { en } from "@/i18n/en.ts";
 import { ScopeBuilder } from "./scope-builder.tsx";
 import { ContractPanel } from "./contract-panel.tsx";
+import { MeasurementsPanel } from "./measurements-panel.tsx";
 
 export default async function ScopePage({ params }: { params: Promise<{ jobId: string }> }) {
   const user = await getCurrentUser();
@@ -25,6 +26,7 @@ export default async function ScopePage({ params }: { params: Promise<{ jobId: s
     <>
       <p><Link href="/jobs">{en.jobs.back}</Link></p>
       <h1>{en.scope.title(data.job.jobNumber)}</h1>
+      <MeasurementsPanel jobId={data.job.id} />
       <ScopeBuilder
         jobId={data.job.id}
         canEdit={data.canEdit}

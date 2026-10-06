@@ -517,3 +517,41 @@ model Invoice {
   @@index([jobId])
   @@map("invoices")
 }
+
+model JobMeasurement {
+  id              String   @id @default(uuid()) @db.Uuid
+  jobId           String   @map("job_id") @db.Uuid
+  source          String
+  hoverJobId      String?  @map("hover_job_id")
+  hoverModelId    String?  @map("hover_model_id")
+  roofAreaSqft    Int      @map("roof_area_sqft")
+  facets          Int?
+  pitches         Json     @default("[]")
+  ridgesHipsFt10  Int      @default(0) @map("ridges_hips_ft10")
+  valleysFt10     Int      @default(0) @map("valleys_ft10")
+  rakesFt10       Int      @default(0) @map("rakes_ft10")
+  eavesFt10       Int      @default(0) @map("eaves_ft10")
+  flashingFt10    Int      @default(0) @map("flashing_ft10")
+  stepFlashingFt10 Int     @default(0) @map("step_flashing_ft10")
+  sidingAreaSqft  Int?     @map("siding_area_sqft")
+  raw             Json?
+  note            String?
+  createdBy       String?  @map("created_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([jobId, createdAt(sort: Desc)])
+  @@map("job_measurements")
+}
+
+model IntegrationCredential {
+  system          String   @id
+  accessTokenEnc  String   @map("access_token_enc")
+  refreshTokenEnc String   @map("refresh_token_enc")
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz()
+  ownerId         String?  @map("owner_id")
+  status          String   @default("connected")
+  connectedBy     String?  @map("connected_by") @db.Uuid
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("integration_credentials")
+}

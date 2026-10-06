@@ -17,6 +17,7 @@ const Item = z.object({
   quantity: z.number().finite(),
   unitCostCents: z.number().int().optional(),
   color: z.string().max(60).optional(),
+  unit: z.string().max(12).optional(),
 });
 const Body = z.object({
   title: z.string().min(1).max(120),

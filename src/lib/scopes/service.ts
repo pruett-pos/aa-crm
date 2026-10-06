@@ -11,6 +11,14 @@ import {
 
 export class ScopeInputError extends Error {}
 
+/** A unit like sq, lf, ea, hr: 1 to 8 letters. Missing means "ea". */
+function cleanUnit(raw: string | undefined, lineIndex: number): string {
+  const u = (raw ?? "").trim().toLowerCase();
+  if (u === "") return "ea";
+  if (!/^[a-z]{1,8}$/.test(u)) throw new ScopeInputError(`Line ${lineIndex + 1}: the unit should be 1 to 8 letters, like sq or lf`);
+  return u;
+}
+
 const MAX_ITEMS = 200;
 const MAX_QUANTITY = 100_000;
 const MAX_UNIT_COST_CENTS = 100_000_000; // $1M per unit is surely a typo
@@ -35,6 +43,7 @@ export function computeScope(input: ScopeInput, catalog: Product[], jobDivisions
     let unitCostCents: number;
     let description: string;
     let productId: string | null = null;
+    let unit: string | null = null;
     if (it.kind === "material") {
       const p = it.productId ? byId.get(it.productId) : undefined;
       if (!p) throw new ScopeInputError(`Line ${i + 1}: pick a product from the catalog`);
@@ -49,6 +58,7 @@ export function computeScope(input: ScopeInput, catalog: Product[], jobDivisions
         throw new ScopeInputError(`Line ${i + 1}: enter a cost`);
       }
       unitCostCents = c;
+      unit = cleanUnit(it.unit, i);
     } else {
       throw new ScopeInputError(`Line ${i + 1}: unknown line type`);
     }
@@ -56,7 +66,7 @@ export function computeScope(input: ScopeInput, catalog: Product[], jobDivisions
       kind: it.kind, sortOrder: i, productId, description,
       quantity: it.quantity, unitCostCents,
       unitPriceCents: priceForTargetMarginCents(unitCostCents, input.targetMarginBps),
-      color: it.color?.trim() || null,
+      color: it.color?.trim() || null, unit,
     };
   });
 
@@ -97,7 +107,7 @@ export type ScopeView = {
   title: string;
   items: {
     kind: ComputedItem["kind"]; description: string; quantity: number;
-    unitPriceCents: number; color: string | null; productId: string | null;
+    unitPriceCents: number; color: string | null; productId: string | null; unit: string | null;
     unitCostCents?: number;
   }[];
   saleCents: number;
@@ -121,7 +131,7 @@ export function toView(
     id: scope.id, division: scope.division, selected: scope.selected, tier: scope.tier, title: scope.title, saleCents: scope.saleCents,
     items: scope.items.map((i) => ({
       kind: i.kind, description: i.description, quantity: i.quantity,
-      unitPriceCents: i.unitPriceCents, color: i.color, productId: i.productId,
+      unitPriceCents: i.unitPriceCents, color: i.color, productId: i.productId, unit: i.unit ?? null,
       ...(showMargin ? { unitCostCents: i.unitCostCents } : {}),
     })),
   };

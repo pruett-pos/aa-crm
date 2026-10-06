@@ -33,7 +33,7 @@ export type MeasurementRow = Measurements & {
   squares: number; wasteSquares: { pct: number; squares: number }[];
 };
 export type MeasurementView = {
-  job: { id: string; jobNumber: number; address: string };
+  job: { id: string; jobNumber: number; address: string; divisions: string[] };
   canEdit: boolean;
   locked: boolean;
   current: MeasurementRow | null;
@@ -61,7 +61,7 @@ export async function measurementView(store: MeasurementStore, actor: Actor, job
   const { job } = await load(store, actor, jobId);
   const all = await store.list(jobId);
   return {
-    job: { id: job.id, jobNumber: job.jobNumber, address: `${job.street}, ${job.city} ${job.zip}` },
+    job: { id: job.id, jobNumber: job.jobNumber, address: `${job.street}, ${job.city} ${job.zip}`, divisions: job.divisions },
     canEdit: canEditMeasurements(actor, job) && !measurementsLocked(job),
     locked: measurementsLocked(job),
     current: all[0] ? toRow(all[0]) : null,

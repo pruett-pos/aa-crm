@@ -28,6 +28,7 @@ export type ScopeItemInput = {
   quantity: number;
   unitCostCents?: number;      // labor / misc only; materials price from the catalog
   color?: string;
+  unit?: string;               // labor / misc lines: what the quantity is measured in (sq, lf, ea)
 };
 
 export type ComputedItem = {
@@ -41,6 +42,8 @@ export type ComputedItem = {
   unitCostCents: number;
   unitPriceCents: number;
   color: string | null;
+  /** Labor and other lines only: sq, lf, ea... Material lines use the catalog product's unit. */
+  unit?: string | null;
 };
 
 export type ComputedScope = {

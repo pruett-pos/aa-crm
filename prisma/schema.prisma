@@ -354,6 +354,7 @@ model ScopeItem {
   unitCostCents  BigInt   @map("unit_cost_cents")
   unitPriceCents BigInt   @map("unit_price_cents")
   color          String?
+  unit           String?
   scope          Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
   product        Product? @relation(fields: [productId], references: [id])
 
@@ -554,4 +555,23 @@ model IntegrationCredential {
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
   @@map("integration_credentials")
+}
+
+model RoofingAssemblyLine {
+  id            String   @id @default(uuid()) @db.Uuid
+  tier          String
+  role          String
+  kind          String
+  productId     String?  @map("product_id") @db.Uuid
+  description   String?
+  unit          String?
+  coverage      Decimal? @db.Decimal(10, 2)
+  unitCostCents BigInt?  @map("unit_cost_cents")
+  sortOrder     Int      @default(0) @map("sort_order")
+  enabled       Boolean  @default(true)
+  updatedBy     String?  @map("updated_by") @db.Uuid
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([tier, role])
+  @@map("roofing_assembly_lines")
 }

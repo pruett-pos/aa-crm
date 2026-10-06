@@ -209,7 +209,8 @@ CREATE TABLE scope_items (
   quantity    numeric(12,2) NOT NULL,
   unit_cost_cents bigint NOT NULL,           -- Pruett Builder price or labor rate
   unit_price_cents bigint NOT NULL,          -- what the customer pays
-  color       text
+  color       text,
+  unit            text                                 -- labor and other lines: sq, lf, ea...; materials use the product's unit
 );
 
 CREATE TABLE change_orders (
@@ -460,6 +461,26 @@ CREATE TABLE integration_credentials (
   status             text NOT NULL DEFAULT 'connected' CHECK (status IN ('connected','needs_reconnect')),
   connected_by       uuid REFERENCES users(id),
   updated_at         timestamptz NOT NULL DEFAULT now()
+);
+
+-- Roofing assembly settings: for each package tier, which catalog product fills each material role (with how much one unit
+-- covers) and which labor lines go on the scope (with a cost rate). Edited by an admin. Sample rows for a dev database
+-- live in db/seed_assemblies.sql; production starts empty and an admin fills it in.
+CREATE TABLE roofing_assembly_lines (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tier          text NOT NULL CHECK (tier IN ('good','better','best')),
+  role          text NOT NULL,
+  kind          text NOT NULL CHECK (kind IN ('material','labor')),
+  product_id    uuid REFERENCES products(id),
+  description   text,
+  unit          text,
+  coverage      numeric(10,2) CHECK (coverage IS NULL OR coverage > 0),
+  unit_cost_cents bigint CHECK (unit_cost_cents IS NULL OR unit_cost_cents >= 0),
+  sort_order    integer NOT NULL DEFAULT 0,
+  enabled       boolean NOT NULL DEFAULT true,
+  updated_by    uuid REFERENCES users(id),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tier, role)
 );
 
 -- Integration log (DemandIQ, QBO, Pruett sync, e-sign webhooks) -----------

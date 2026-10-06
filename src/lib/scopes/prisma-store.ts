@@ -7,6 +7,7 @@ import type {
 type DbItem = {
   id: string; kind: string; sortOrder: number; productId: string | null; description: string;
   quantity: { toString(): string }; unitCostCents: bigint; unitPriceCents: bigint; color: string | null;
+  unit: string | null;
 };
 type DbScope = {
   id: string; division: string; selected: boolean; tier: string; title: string; saleCents: bigint; costCents: bigint;
@@ -23,7 +24,7 @@ export function toStored(s: DbScope): StoredScope {
     items: [...s.items].sort((a, b) => a.sortOrder - b.sortOrder).map((i) => ({
       id: i.id, kind: i.kind as LineKind, sortOrder: i.sortOrder, productId: i.productId,
       description: i.description, quantity: Number(i.quantity.toString()),
-      unitCostCents: Number(i.unitCostCents), unitPriceCents: Number(i.unitPriceCents), color: i.color,
+      unitCostCents: Number(i.unitCostCents), unitPriceCents: Number(i.unitPriceCents), color: i.color, unit: i.unit,
     })),
   };
 }
@@ -93,7 +94,7 @@ export function createPrismaScopeStore(db: PrismaClient): ScopeStore {
           data: scope.items.map((i) => ({
             scopeId: row.id, kind: i.kind, sortOrder: i.sortOrder, productId: i.productId,
             description: i.description, quantity: i.quantity,
-            unitCostCents: BigInt(i.unitCostCents), unitPriceCents: BigInt(i.unitPriceCents), color: i.color,
+            unitCostCents: BigInt(i.unitCostCents), unitPriceCents: BigInt(i.unitPriceCents), color: i.color, unit: i.unit ?? null,
           })),
         });
         return tx.scope.findUniqueOrThrow({ where: { id: row.id }, include: { items: true } });

@@ -11,7 +11,7 @@ import { TIERS, type LineKind, type ScopeItemInput, type Tier } from "@/lib/scop
 import { DIVISIONS } from "@/lib/leads/types.ts";
 import { SCOPE_DEFAULT_TARGET_MARGIN_BPS, commissionRateBps, type Division } from "@/lib/rules.ts";
 
-type Line = { kind: LineKind; productId: string; description: string; quantity: string; unitCost: string; color: string };
+type Line = { kind: LineKind; productId: string; description: string; quantity: string; unitCost: string; color: string; unit: string };
 type Draft = { title: string; targetPct: string; lines: Line[] };
 
 const money = (cents: number) => (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -27,7 +27,7 @@ function draftFrom(view: ScopeView | undefined, tier: Tier): Draft {
     lines: view.items.map((i) => ({
       kind: i.kind, productId: i.productId ?? "", description: i.kind === "material" ? "" : i.description,
       quantity: String(i.quantity), unitCost: i.kind === "material" ? "" : ((i.unitCostCents ?? 0) / 100).toFixed(2),
-      color: i.color ?? "",
+      color: i.color ?? "", unit: i.kind === "material" ? "" : i.unit ?? "",
     })),
   };
 }
@@ -40,7 +40,7 @@ function toInput(d: Draft): { targetMarginBps: number; items: ScopeItemInput[] }
       ...(l.kind === "material" && l.color.trim() ? { color: l.color.trim() } : {}),
       ...(l.kind === "material"
         ? { productId: l.productId }
-        : { description: l.description, unitCostCents: Math.round(parseFloat(l.unitCost || "0") * 100) }),
+        : { description: l.description, unitCostCents: Math.round(parseFloat(l.unitCost || "0") * 100), ...(l.unit.trim() ? { unit: l.unit.trim() } : {}) }),
       quantity: parseFloat(l.quantity),
     })),
   };
@@ -84,7 +84,7 @@ export function ScopeBuilder(props: {
   const setLine = (i: number, patch: Partial<Line>) =>
     update({ lines: draft.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) });
   const addLine = (kind: LineKind) =>
-    update({ lines: [...draft.lines, { kind, productId: "", description: "", quantity: "1", unitCost: "", color: "" }] });
+    update({ lines: [...draft.lines, { kind, productId: "", description: "", quantity: "1", unitCost: "", color: "", unit: "" }] });
 
   // Live preview uses the same pricing code as the server. The server recomputes on save.
   const preview = useMemo(() => {
@@ -222,7 +222,12 @@ export function ScopeBuilder(props: {
                           value={l.color} onChange={(e) => setLine(i, { color: e.target.value })} />
                       )}
                     </td>
-                    <td><input aria-label={en.scope.quantity} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
+                    <td>
+                      <input aria-label={en.scope.quantity} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} />
+                      {l.kind !== "material" && (
+                        <input aria-label={en.scope.unitLabel} placeholder="ea" maxLength={8} size={4} value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value })} />
+                      )}
+                    </td>
                     <td>
                       {l.kind === "material" ? <span className="muted">{computed ? money(computed.unitCostCents) : "-"}</span> : (
                         <input aria-label={en.scope.unitCost} inputMode="decimal" value={l.unitCost} onChange={(e) => setLine(i, { unitCost: e.target.value })} />

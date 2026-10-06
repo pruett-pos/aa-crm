@@ -40,6 +40,7 @@ export function MeasurementsPanel({ jobId }: { jobId: string }) {
       {msg && <p className={msg.ok ? "ok" : "error"} role="status">{msg.text}</p>}
       {view.current ? <Values row={view.current} /> : <p className="muted">{en.measurements.none}</p>}
       {view.locked && <p className="muted small-text">{en.measurements.locked}</p>}
+      {view.canEdit && view.current && view.job.divisions.includes("roofing") && <BuildScopes jobId={jobId} />}
       {view.canEdit && (
         <>
           <HoverSearch post={post} busy={busy} done={async (t) => { setMsg({ ok: true, text: t }); await load(); }} />
@@ -165,5 +166,68 @@ function ManualForm({ post, busy, done }: { post: Post; busy: boolean; done: (t:
       <p><label>{m.noteLabel}<br /><input value={v.note} maxLength={300} onChange={set("note")} /></label></p>
       <button type="button" disabled={busy || v.roofAreaSqft.trim() === ""} onClick={save}>{m.save}</button>
     </details>
+  );
+}
+
+type Skipped = { tier: string; role: string; reason: string };
+
+/** Build the Good, Better and Best roofing scopes from the current measurements and the assembly settings. */
+function BuildScopes({ jobId }: { jobId: string }) {
+  const e = en.estimating;
+  const [waste, setWaste] = useState("10");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  const [needsReplace, setNeedsReplace] = useState(false);
+  const [left, setLeft] = useState<Skipped[]>([]);
+  const roleName = (r: string) => (en.assemblies.roles as Record<string, string>)[r] ?? r;
+
+  async function run(replace: boolean) {
+    setBusy(true);
+    setMsg(null);
+    const res = await fetch(`/api/jobs/${jobId}/scopes/from-measurements`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ division: "roofing", wastePct: Number(waste), replace }),
+    }).catch(() => null);
+    const out = ((await res?.json().catch(() => ({}))) ?? {}) as { error?: string; tiers?: unknown[]; skipped?: Skipped[] };
+    setBusy(false);
+    if (res?.ok) {
+      setNeedsReplace(false);
+      setLeft((out.skipped ?? []).filter((s) => s.reason !== "not_needed"));
+      setMsg({ ok: true, text: e.built(out.tiers?.length ?? 0) });
+      setTimeout(() => window.location.reload(), 1200);
+      return;
+    }
+    if (out.error === "scope_exists") { setNeedsReplace(true); return; }
+    setLeft(out.skipped ?? []);
+    setMsg({ ok: false, text: (e.errors as Record<string, string>)[res?.status === 429 ? "rate_limited" : out.error ?? ""] ?? e.errors.generic });
+  }
+
+  return (
+    <div className="noprint">
+      <h3 className="small-heading">{e.buildTitle}</h3>
+      <p className="muted small-text">{e.buildHelp}</p>
+      {msg && <p className={msg.ok ? "ok" : "error"} role="status">{msg.text}</p>}
+      <p>
+        <label>{e.waste}{" "}
+          <select value={waste} onChange={(ev) => setWaste(ev.target.value)}>
+            {[0, 5, 10, 15, 20].map((w) => <option key={w} value={w}>{w}%</option>)}
+          </select>
+        </label>{" "}
+        <button type="button" disabled={busy} onClick={() => run(false)}>{e.build}</button>
+      </p>
+      {needsReplace && (
+        <p className="warn">
+          {e.replaceWarn}{" "}
+          <button type="button" disabled={busy} onClick={() => run(true)}>{e.replace}</button>
+        </p>
+      )}
+      {left.length > 0 && (
+        <div className="small-text">
+          <p className="muted">{e.leftOut(left.length)}</p>
+          <ul className="list">
+            {left.map((s, i) => <li key={i}>{(en.assemblies.tiers as Record<string, string>)[s.tier] ?? s.tier}: {roleName(s.role)} ({(e.skipReason as Record<string, string>)[s.reason] ?? s.reason})</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

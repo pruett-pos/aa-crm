@@ -159,10 +159,10 @@ function ManualForm({ post, busy, done }: { post: Post; busy: boolean; done: (t:
         <p key={i}>
           <input aria-label={m.pitchLabel} placeholder={m.pitchLabel} value={p.pitch} maxLength={10} onChange={(e) => setPitches((xs) => xs.map((x, k) => (k === i ? { ...x, pitch: e.target.value } : x)))} />{" "}
           <input aria-label={m.pitchAreaLabel} placeholder={m.pitchAreaLabel} inputMode="decimal" value={p.area} maxLength={20} onChange={(e) => setPitches((xs) => xs.map((x, k) => (k === i ? { ...x, area: e.target.value } : x)))} />{" "}
-          <button type="button" onClick={() => setPitches((xs) => xs.filter((_, k) => k !== i))}>{m.removePitch}</button>
+          <button type="button" className="secondary small" onClick={() => setPitches((xs) => xs.filter((_, k) => k !== i))}>{m.removePitch}</button>
         </p>
       ))}
-      {pitches.length < 12 && <p><button type="button" onClick={() => setPitches((xs) => [...xs, { pitch: "", area: "" }])}>{m.addPitch}</button></p>}
+      {pitches.length < 12 && <p><button type="button" className="secondary small" onClick={() => setPitches((xs) => [...xs, { pitch: "", area: "" }])}>{m.addPitch}</button></p>}
       <p><label>{m.noteLabel}<br /><input value={v.note} maxLength={300} onChange={set("note")} /></label></p>
       <button type="button" disabled={busy || v.roofAreaSqft.trim() === ""} onClick={save}>{m.save}</button>
     </details>

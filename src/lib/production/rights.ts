@@ -24,7 +24,8 @@ export function jobRights(a: Actor, j: ProductionJob, pm: readonly Division[]) {
     /** Estimator (own job) and admin see the whole job; a PM or crew leader sees only their own trades (see tradeRights). */
     canViewAll: staff,
     canOrderMaterials: staff && open && gate && !ordered,
-    canEditSelections: staff && open && gate && !ordered,
+    // Colors are chosen right after the contract is signed (the deposit can still be on its way); only ordering waits for it.
+    canEditSelections: staff && open && j.contractSigned && !ordered,
   };
 }
 

@@ -225,6 +225,24 @@ test("selections: a bad line in the batch saves nothing", async () => {
   assert.equal(s.chosen[0].items.find((i) => i.id === "r3")!.color, null);
 });
 
+test("selections: colors can be entered as soon as the contract is signed, before the deposit; ordering still waits for it", async () => {
+  const s = world({ depositPaidCents: 0, stage: "contract_signed" });
+  assert.deepEqual(jobRights(EST1, s.jobs[0], []), { canViewAll: true, canOrderMaterials: false, canEditSelections: true });
+  await saveSelections(s, { actor: EST1, jobId: "j1", items: [{ itemId: "r3", color: "Charcoal" }] });
+  assert.equal(s.chosen[0].items.find((i) => i.id === "r3")!.color, "Charcoal");
+  assert.equal(await code(order(s, EST1)), "deposit_not_covered");                         // the order itself is still gated
+  assert.equal(await code(saveSelections(s, { actor: EST2, jobId: "j1", items: [{ itemId: "r3", color: "Red" }] })), "forbidden");     // and still only the job's estimator
+  assert.equal(await code(saveSelections(s, { actor: PM_ROOF, jobId: "j1", items: [{ itemId: "r3", color: "Red" }] })), "forbidden");
+});
+
+test("selections: not before the contract is signed, never on a closed job", async () => {
+  const unsigned = world({ contractSigned: false });
+  assert.equal(jobRights(EST1, unsigned.jobs[0], []).canEditSelections, false);
+  assert.equal(await code(saveSelections(unsigned, { actor: EST1, jobId: "j1", items: [{ itemId: "r3", color: "Red" }] })), "no_signed_contract");
+  const lost = world({ stage: "lost" });
+  assert.equal(await code(saveSelections(lost, { actor: EST1, jobId: "j1", items: [{ itemId: "r3", color: "Red" }] })), "closed");
+});
+
 // ---------- propose ----------
 test("propose: the job's own estimator or admin; sets the date and keeps the job's install date at the earliest", async () => {
   const s = world();

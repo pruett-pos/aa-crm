@@ -106,21 +106,21 @@ function Item({ item: i, busy, onTick, send, done, jobId }: { item: ItemView; bu
       <li>
         <input value={en_} maxLength={200} onChange={(e) => setEn(e.target.value)} aria-label={en.closeout.addLabel} />{" "}
         <input value={ru} maxLength={200} onChange={(e) => setRu(e.target.value)} aria-label={en.closeout.addRuLabel} placeholder={en.closeout.addRuLabel} />{" "}
-        <button type="button" disabled={busy} onClick={save}>{en.closeout.save}</button>{" "}
-        <button type="button" disabled={busy} onClick={() => { setEditing(false); setEn(i.labelEn); setRu(i.labelRu ?? ""); }}>{en.closeout.cancel}</button>
+        <button type="button" className="small" disabled={busy} onClick={save}>{en.closeout.save}</button>{" "}
+        <button type="button" className="secondary small" disabled={busy} onClick={() => { setEditing(false); setEn(i.labelEn); setRu(i.labelRu ?? ""); }}>{en.closeout.cancel}</button>
       </li>
     );
   }
   return (
     <li>
-      <label>
-        <input type="checkbox" checked={i.done} disabled={busy || !i.canTick} onChange={onTick} /> {i.labelEn}
+      <label className="check">
+        <input type="checkbox" checked={i.done} disabled={busy || !i.canTick} onChange={onTick} /> <span>{i.labelEn}</span>
       </label>
       {i.labelRu && <div className="muted small-text"><span>{en.closeout.ruTag}</span> {i.labelRu}</div>}
       {i.canEdit && (
         <span className="noprint">
-          {" "}<button type="button" disabled={busy} onClick={() => setEditing(true)}>{en.closeout.rename}</button>
-          {" "}<button type="button" disabled={busy} onClick={remove}>{en.closeout.remove}</button>
+          {" "}<button type="button" className="secondary small" disabled={busy} onClick={() => setEditing(true)}>{en.closeout.rename}</button>
+          {" "}<button type="button" className="secondary small" disabled={busy} onClick={remove}>{en.closeout.remove}</button>
         </span>
       )}
     </li>
@@ -216,12 +216,12 @@ function InvoicePanel({ view, send, busy, done, jobId }: {
           </p>
           <p className="muted small-text">{en.closeout.sendToHint(inv.customerEmail)}</p>
           {!voiding ? (
-            view.job.stage === "invoiced" && <p><button type="button" disabled={busy} onClick={() => setVoiding(true)}>{en.closeout.void}</button></p>
+            view.job.stage === "invoiced" && <p><button type="button" className="secondary small" disabled={busy} onClick={() => setVoiding(true)}>{en.closeout.void}</button></p>
           ) : (
             <p>
               <label>{en.closeout.voidReason}<br /><input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} /></label>{" "}
               <button type="button" disabled={busy || reason.trim().length < 3} onClick={voidIt}>{en.closeout.voidConfirm}</button>{" "}
-              <button type="button" disabled={busy} onClick={() => { setVoiding(false); setReason(""); }}>{en.closeout.cancel}</button>
+              <button type="button" className="secondary small" disabled={busy} onClick={() => { setVoiding(false); setReason(""); }}>{en.closeout.cancel}</button>
             </p>
           )}
         </div>

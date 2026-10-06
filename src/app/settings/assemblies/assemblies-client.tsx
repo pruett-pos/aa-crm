@@ -44,7 +44,7 @@ export function AssembliesClient({ lines, products, materialRoles, laborRoles }:
         <section key={tier} className="report">
           <h2>{en.assemblies.tiers[tier]}</h2>
           <h3 className="small-heading">{en.assemblies.material}</h3>
-          <table className="lines">
+          <div style={{ overflowX: "auto" }}><table className="lines">
             <thead><tr><th>{en.assemblies.role}</th><th>{en.assemblies.basis}</th><th>{en.assemblies.product}</th><th>Coverage</th><th>{en.assemblies.enabled}</th><th /></tr></thead>
             <tbody>
               {materialRoles.map((m) => {
@@ -69,9 +69,9 @@ export function AssembliesClient({ lines, products, materialRoles, laborRoles }:
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
           <h3 className="small-heading">{en.assemblies.labor}</h3>
-          <table className="lines">
+          <div style={{ overflowX: "auto" }}><table className="lines">
             <thead><tr><th>{en.assemblies.role}</th><th>{en.assemblies.basis}</th><th>{en.assemblies.description}</th><th>{en.assemblies.unit}</th><th>{en.assemblies.rate}</th><th>{en.assemblies.enabled}</th><th /></tr></thead>
             <tbody>
               {laborRoles.map((l) => {
@@ -92,7 +92,7 @@ export function AssembliesClient({ lines, products, materialRoles, laborRoles }:
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         </section>
       ))}
     </div>

@@ -5,7 +5,9 @@ import { getScopeStore } from "@/lib/scopes/index.ts";
 import { getContractStore } from "@/lib/contracts/index.ts";
 import { authorizeJob, clientIp, contractErrorResponse } from "@/lib/contracts/access.ts";
 import { finalizeSignature } from "@/lib/contracts/sign.ts";
-import { sendSignedContract } from "@/integrations/resend/index.ts";
+import { sendColorsNeededEmail, sendSignedContract } from "@/integrations/resend/index.ts";
+import { getWorkOrderStore } from "@/lib/workorders/index.ts";
+import { onContractSigned } from "@/lib/workorders/logic.ts";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -49,7 +51,9 @@ export async function POST(req: Request, { params }: Ctx) {
       emailed = false;
       console.error("Signed-contract email failed:", e instanceof Error ? e.message : e);
     }
-    return Response.json({ status: "signed", emailed, signedSha256: result.signedSha256 });
+    // Now that it is signed: draft the work orders and tell the estimator to enter colors. Never throws and never undoes the signature.
+    const afterSigning = await onContractSigned(getWorkOrderStore(), sendColorsNeededEmail, doc.jobId);
+    return Response.json({ status: "signed", emailed, signedSha256: result.signedSha256, workOrders: afterSigning.created.length });
   } catch (e) {
     return contractErrorResponse(e);
   }

@@ -45,6 +45,25 @@ export async function sendInvoiceEmail(a: {
   if (error) throw new Error(`Resend failed: ${error.message}`);
 }
 
+/** Tell the job's estimator a contract was signed and the colors are theirs to enter. Throws on failure; the caller ignores it. */
+export async function sendColorsNeededEmail(a: { to: string; estimatorName: string; jobNumber: number; address: string; missing: number }): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    if (process.env.NODE_ENV === "production") throw new Error("RESEND_API_KEY is not set");
+    console.log(`[dev] job ${a.jobNumber} signed: ${a.estimatorName} would be told to enter colors (${a.missing} lines) at ${a.to}`);
+    return;
+  }
+  const from = process.env.EMAIL_FROM;
+  if (!from) throw new Error("EMAIL_FROM is not set");
+  const { error } = await new Resend(apiKey).emails.send({
+    from,
+    to: a.to,
+    subject: `Job ${a.jobNumber} is signed: enter the colors`,
+    text: `Hello ${a.estimatorName},\n\nThe contract for job ${a.jobNumber} (${a.address}) was just signed.${a.missing > 0 ? ` ${a.missing} material lines still need a color.` : ""} Please open the job's production page, enter the colors, review the work order and issue it.`,
+  });
+  if (error) throw new Error(`Resend failed: ${error.message}`);
+}
+
 /** Send the magic-link email. With no RESEND_API_KEY (local dev) the link is logged instead. */
 export async function sendLoginLink(to: string, link: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;

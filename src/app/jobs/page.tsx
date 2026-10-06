@@ -6,6 +6,7 @@ import { canReadScopes } from "@/lib/scopes/service.ts";
 import { canViewPayments } from "@/lib/payments/logic.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
 import { STAGES } from "@/lib/rules.ts";
+import { getWorkOrderStore } from "@/lib/workorders/index.ts";
 import { en } from "@/i18n/en.ts";
 
 export default async function JobsPage() {
@@ -15,6 +16,8 @@ export default async function JobsPage() {
 
   const store = getScopeStore();
   const all = await store.listJobs();
+  // Signed jobs still waiting on colors, for the people who enter them (admin and the job's own estimator).
+  const needingColors = new Map((await getWorkOrderStore().jobsNeedingColors()).map((n) => [n.jobId, n.missing]));
   const visible = [];
   for (const j of all) {
     const scopes = canReadScopes(user, j, await store.divisionManagerIds(j.divisions));
@@ -32,6 +35,9 @@ export default async function JobsPage() {
           {visible.map(({ j, scopes, payments }) => (
             <li key={j.id}>
               <strong>{en.jobs.number} {j.jobNumber}</strong>{" "}
+              {needingColors.has(j.id) && (user.role === "admin" || (user.role === "estimator" && j.estimatorId === user.id)) && (
+                <Link href={`/jobs/${j.id}/production`} className="warn">{en.jobs.colorsNeeded(needingColors.get(j.id) ?? 0)}</Link>
+              )}{" "}
               <span className="muted">
                 {en.jobs.types[j.jobType]} · {j.divisions.join(", ").replaceAll("_", " ")} · {j.stage.replaceAll("_", " ")}
               </span>{" "}

@@ -40,6 +40,12 @@ function requireOpenGated(job: ProductionJob) {
   if (!depositGateMet(job)) throw new ProductionError("deposit_not_covered", "The deposit isn't covered yet");
 }
 
+/** Colors can be entered once the contract is signed; the deposit only gates ordering and scheduling. */
+function requireOpenSigned(job: ProductionJob) {
+  if (!isOpen(job)) throw new ProductionError("closed", "This job is closed");
+  if (!job.contractSigned) throw new ProductionError("no_signed_contract", "The contract isn't signed yet");
+}
+
 function dateProblem(date: string, today: string): never | void {
   const p = checkInstallDate(date, today);
   if (p === "invalid") throw new ProductionError("date_invalid", "Enter a real date");
@@ -170,7 +176,7 @@ export async function saveSelections(
     const job = await tx.getJob();
     if (!job) throw new ProductionError("not_found");
     if (!jobRights(a.actor, job, pm).canViewAll) throw new ProductionError("forbidden");
-    requireOpenGated(job);
+    requireOpenSigned(job);
     if (job.materialsOrderedAt) throw new ProductionError("selections_locked", "Materials are already ordered, so colors are locked");
     const valid = await tx.chosenMaterialItemIds();
     const cleaned = a.items.map((i) => {

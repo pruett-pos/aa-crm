@@ -7,6 +7,7 @@ import { ProductionError, productionView } from "@/lib/production/logic.ts";
 import { STAGES } from "@/lib/rules.ts";
 import { en } from "@/i18n/en.ts";
 import { PhotosPanel } from "./photos-panel.tsx";
+import { WorkOrderPanel } from "./workorder-panel.tsx";
 import { ProductionClient } from "./production-client.tsx";
 
 // Admin and the job's estimator see the whole job; a PM the trades they manage; a crew leader the trades assigned to them.
@@ -38,6 +39,7 @@ export default async function ProductionPage({ params }: { params: Promise<{ job
         <p className="noprint"><Link href={`/jobs/${view.job.id}/closeout`}>{en.closeout.openCloseout}</Link></p>
       )}
       <PhotosPanel jobId={view.job.id} />
+      <WorkOrderPanel jobId={view.job.id} />
       <ProductionClient view={view} />
     </>
   );

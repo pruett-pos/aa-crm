@@ -1,6 +1,6 @@
 import {
   PAYMENT_MAX_CENTS, STAGES, balanceDueCents, commissionEarnedCents, depositDueCents,
-  grossMarginBps, nextStage, parseDollarsToCents, wouldOverpay,
+  grossMarginBps, nextStage, parseDollarsToCents, stageAfterPayment, wouldOverpay,
 } from "../rules.ts";
 import type { Role } from "../auth/roles.ts";
 import { buildAccrual } from "../commission/logic.ts";
@@ -159,6 +159,12 @@ export async function recordPayment(
         await tx.setStage(job.stage, next, input.recorder.id);
         stageChanged = true;
       }
+    }
+    // An invoiced job whose balance reaches zero is paid in full.
+    const paidStage = stageAfterPayment(job.stage, summary.balanceDueCents);
+    if (paidStage) {
+      await tx.setStage(job.stage, paidStage, input.recorder.id);
+      stageChanged = true;
     }
     return { payment, stageChanged, summary };
   });

@@ -73,7 +73,7 @@ export function contractText(d: ContractData): { heading: string; lines: string[
   return { heading: "A&A Exterior Group - Contract", lines, boldLines: bold };
 }
 
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   if (!text) return [""];
   const out: string[] = [];
   let line = "";

@@ -6,6 +6,7 @@ import {
   pruettPriceCents, routeCall, stagesFor, nextStage,
   priceForTargetMarginCents, scopeTotals, scopeCommissionRateBps,
   depositDueCents, balanceDueCents, wouldOverpay, parseDollarsToCents, netPayout, allocateDraws,
+  INVOICE_TERMS_DAYS, addDays, invoiceGate, stageAfterPayment,
 } from "../src/lib/rules.ts";
 
 test("gross margin", () => {
@@ -168,4 +169,42 @@ test("pipeline: retail skips insurance stages; deposit stage skipped when none d
   assert.equal(nextStage("contract_signed", "retail", 250_000), "deposit_collected");
   assert.equal(nextStage("inspected", "insurance", 0), "contingency_signed");
   assert.equal(nextStage("paid_in_full", "insurance", 0), null);
+});
+
+// ---------- Closeout and invoicing ----------
+const done = (n: number) => Array.from({ length: n }, () => ({ done: true }));
+const gate = (over: Partial<Parameters<typeof invoiceGate>[0]> = {}) =>
+  invoiceGate({ stage: "closeout_punchlist", contractSigned: true, items: done(3), hasLiveInvoice: false, ...over });
+
+test("invoice gate: closeout, signed contract, a complete punchlist, no live invoice", () => {
+  assert.deepEqual(gate(), { ok: true });
+  assert.deepEqual(gate({ items: [...done(2), { done: false }] }), { ok: false, reason: "punchlist_open" });
+  assert.deepEqual(gate({ items: [] }), { ok: false, reason: "no_punchlist" });         // an empty list is not a finished list
+  assert.deepEqual(gate({ contractSigned: false }), { ok: false, reason: "no_contract" });
+  assert.deepEqual(gate({ hasLiveInvoice: true }), { ok: false, reason: "invoice_exists" });
+});
+
+test("invoice gate: only closeout, or invoiced (to reissue after a void); nothing earlier or later or closed", () => {
+  for (const stage of ["new_lead", "contract_signed", "deposit_collected", "scheduled", "in_production", "depreciation_pending", "paid_in_full", "lost", "cancelled_after_approval"]) {
+    assert.deepEqual(gate({ stage }), { ok: false, reason: "wrong_stage" }, stage);
+  }
+  assert.deepEqual(gate({ stage: "invoiced" }), { ok: true });
+  assert.deepEqual(gate({ stage: "invoiced", hasLiveInvoice: true }), { ok: false, reason: "invoice_exists" });
+});
+
+test("paid in full: an invoiced job at a zero balance, never anything else, never backward", () => {
+  assert.equal(stageAfterPayment("invoiced", 0), "paid_in_full");
+  assert.equal(stageAfterPayment("depreciation_pending", 0), "paid_in_full");
+  assert.equal(stageAfterPayment("invoiced", 1), null);                  // one cent short
+  assert.equal(stageAfterPayment("invoiced", 250_000), null);
+  for (const stage of ["closeout_punchlist", "in_production", "deposit_collected", "paid_in_full", "lost"]) assert.equal(stageAfterPayment(stage, 0), null, stage);
+});
+
+test("terms are due on receipt; date arithmetic is exact across month and year ends", () => {
+  assert.equal(INVOICE_TERMS_DAYS, 0);
+  assert.equal(addDays("2026-10-14", INVOICE_TERMS_DAYS), "2026-10-14");
+  assert.equal(addDays("2026-10-31", 1), "2026-11-01");
+  assert.equal(addDays("2026-12-31", 10), "2027-01-10");
+  assert.equal(addDays("2028-02-28", 1), "2028-02-29");
+  assert.equal(addDays("2026-03-01", -1), "2026-02-28");
 });

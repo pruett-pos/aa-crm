@@ -223,3 +223,38 @@ export function nextStage(
   if (list[i] === "deposit_collected" && depositCents === 0) i++;
   return list[i] ?? null;
 }
+
+// ---------- Closeout and invoicing ----------
+/** Invoice terms: due on receipt, so the due date is the invoice date. */
+export const INVOICE_TERMS_DAYS = 0;
+
+/** A YYYY-MM-DD date plus whole days. */
+export function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export type InvoiceGate =
+  | { ok: true }
+  | { ok: false; reason: "wrong_stage" | "no_contract" | "no_punchlist" | "punchlist_open" | "invoice_exists" };
+
+/**
+ * May this job be invoiced? It must be in closeout (or already invoiced with its invoice voided, to reissue), the
+ * contract must be signed, and the punchlist must exist with every item done. One live invoice per job.
+ */
+export function invoiceGate(a: {
+  stage: string; contractSigned: boolean; items: { done: boolean }[]; hasLiveInvoice: boolean;
+}): InvoiceGate {
+  if (a.stage !== "closeout_punchlist" && a.stage !== "invoiced") return { ok: false, reason: "wrong_stage" };
+  if (!a.contractSigned) return { ok: false, reason: "no_contract" };
+  if (a.hasLiveInvoice) return { ok: false, reason: "invoice_exists" };
+  if (a.items.length === 0) return { ok: false, reason: "no_punchlist" };
+  if (a.items.some((i) => !i.done)) return { ok: false, reason: "punchlist_open" };
+  return { ok: true };
+}
+
+/** Once an invoiced job's balance reaches zero it is paid in full. Never moves a stage backward. */
+export function stageAfterPayment(stage: string, balanceCents: number): Stage | null {
+  return (stage === "invoiced" || stage === "depreciation_pending") && balanceCents <= 0 ? "paid_in_full" : null;
+}

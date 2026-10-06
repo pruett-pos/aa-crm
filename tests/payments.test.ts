@@ -193,3 +193,43 @@ test("roles: who can record, see commission, and void", () => {
   assert.ok(canVoidPayments("admin") && canVoidPayments("accounting"));
   assert.ok(!canVoidPayments("estimator") && !canVoidPayments("csr"));
 });
+
+// ---------- Paid in full ----------
+test("record: the payment that clears an invoiced job's balance moves it to paid in full", async () => {
+  const store = setup({ stage: "invoiced", contractCents: 1_000_000, costCents: 600_000, depositRequiredCents: 0 });
+  const part = await recordPayment(store, input({ amountText: "6,000", type: "payment" }), at(0));
+  assert.equal(part.stageChanged, false);
+  assert.equal(store.jobs[0].stage, "invoiced");
+  const rest = await recordPayment(store, input({ amountText: "4,000", type: "payment", method: "card", reference: "HELCIM-9", photo: null }), at(120_000));
+  assert.equal(rest.stageChanged, true);
+  assert.equal(rest.summary.balanceDueCents, 0);
+  assert.equal(store.jobs[0].stage, "paid_in_full");
+  assert.deepEqual(store.history.map((h) => [h.from, h.to]), [["invoiced", "paid_in_full"]]);
+});
+
+test("record: an insurance job waiting on depreciation is paid in full when the last dollar arrives", async () => {
+  const store = setup({ jobType: "insurance", stage: "depreciation_pending", contractCents: 1_000_000, costCents: 600_000, depositRequiredCents: 0 });
+  await recordPayment(store, input({ amountText: "7,000", type: "payment", method: "insurance_check", reference: "CK-1" }), at(0));
+  assert.equal(store.jobs[0].stage, "depreciation_pending");
+  const last = await recordPayment(store, input({ amountText: "3,000", type: "depreciation", method: "insurance_check", reference: "CK-2" }), at(120_000));
+  assert.equal(last.stageChanged, true);
+  assert.equal(store.jobs[0].stage, "paid_in_full");
+});
+
+test("record: paying the whole contract early does not skip invoicing; stage waits for the invoice", async () => {
+  for (const stage of ["in_production", "closeout_punchlist"] as const) {
+    const store = setup({ stage, contractCents: 1_000_000, costCents: 600_000, depositRequiredCents: 0 });
+    const r = await recordPayment(store, input({ amountText: "10,000", type: "payment" }), at(0));
+    assert.equal(r.stageChanged, false, stage);
+    assert.equal(store.jobs[0].stage, stage);
+  }
+});
+
+test("void: voiding a payment on a paid-in-full job never moves the stage back", async () => {
+  const store = setup({ stage: "invoiced", contractCents: 500_000, costCents: 300_000, depositRequiredCents: 0 });
+  const r = await recordPayment(store, input({ amountText: "5,000", type: "payment" }), at(0));
+  assert.equal(store.jobs[0].stage, "paid_in_full");
+  await voidPayment(store, { paymentId: r.payment.id, userId: "adm", reason: "bounced check" }, at(60_000));
+  assert.equal(store.jobs[0].stage, "paid_in_full");             // flagged for a person; never automatic
+  assert.equal(store.history.length, 1);
+});

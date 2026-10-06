@@ -38,6 +38,9 @@ export default async function JobsPage() {
               {scopes && <Link href={`/jobs/${j.id}/scope`}>{en.jobs.openScope}</Link>}
               {scopes && payments && " · "}
               {payments && <Link href={`/jobs/${j.id}/payments`}>{en.payments.openPayments}</Link>}
+              {(scopes || payments) && STAGES.indexOf(j.stage) >= STAGES.indexOf("closeout_punchlist") && (
+                <>{" · "}<Link href={`/jobs/${j.id}/closeout`}>{en.closeout.openCloseout}</Link></>
+              )}
               {scopes && STAGES.indexOf(j.stage) >= STAGES.indexOf("contract_signed") && (
                 <>{(scopes || payments) && " · "}<Link href={`/jobs/${j.id}/production`}>{en.production.openProduction}</Link></>
               )}

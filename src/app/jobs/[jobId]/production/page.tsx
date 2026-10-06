@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/index.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
 import { getProductionStore } from "@/lib/production/index.ts";
 import { ProductionError, productionView } from "@/lib/production/logic.ts";
+import { STAGES } from "@/lib/rules.ts";
 import { en } from "@/i18n/en.ts";
 import { PhotosPanel } from "./photos-panel.tsx";
 import { ProductionClient } from "./production-client.tsx";
@@ -33,6 +34,9 @@ export default async function ProductionPage({ params }: { params: Promise<{ job
         {view.job.customerName && <> · {view.job.customerName}</>}
         {" · "}{view.job.stage.replaceAll("_", " ")}
       </p>
+      {STAGES.indexOf(view.job.stage as (typeof STAGES)[number]) >= STAGES.indexOf("closeout_punchlist") && (
+        <p className="noprint"><Link href={`/jobs/${view.job.id}/closeout`}>{en.closeout.openCloseout}</Link></p>
+      )}
       <PhotosPanel jobId={view.job.id} />
       <ProductionClient view={view} />
     </>

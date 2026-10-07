@@ -1,11 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/index.ts";
 import { getHoverOAuthConfig, getHoverTokenStore } from "@/lib/hover/index.ts";
 import { exchangeHoverCode } from "@/integrations/hover/oauth.ts";
 import { publicUrl } from "@/lib/public-url.ts";
-
-const safeEqual = (a: string, b: string) => a.length === b.length && a.length > 0 && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+import { oauthTripIsOurs } from "@/lib/hover/state.ts";
 
 // Role: admin only. Hover sends the admin back here with a one-time code, which is exchanged for tokens (stored encrypted).
 // Nothing about the code or the tokens is ever put in a URL or a message shown to the user.
@@ -23,7 +21,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const cookie = req.headers.get("cookie")?.split(/;\s*/).find((c) => c.startsWith("hover_oauth_state="))?.slice("hover_oauth_state=".length) ?? "";
   if (url.searchParams.get("error")) return done("error=denied");
-  if (!safeEqual(cookie, url.searchParams.get("state") ?? "")) return done("error=bad_state");
+  if (!oauthTripIsOurs(cookie, url.searchParams.get("state"))) return done("error=bad_state");
   const code = url.searchParams.get("code");
   if (!code) return done("error=no_code");
   try {

@@ -101,7 +101,9 @@ export function describeShape(v: unknown, depth = 0): string {
  * when Hover leaves it out (a flat addition has no ridge, say). Anything out of range is refused.
  */
 export function parseHoverMeasurements(raw: unknown): Measurements {
-  const j = raw as any;
+  // Hover's real response (version 2) nests everything under `summary`; the flat shape is kept for older or hand-made data.
+  const top = raw as any;
+  const j = top && typeof top === "object" && top.summary && typeof top.summary === "object" ? top.summary : top;
   const roof = j && typeof j === "object" ? j.roof : null;
   if (!roof || typeof roof !== "object") throw new MeasurementError("no_roof_data", "Hover's measurements have no roof data");
   const area = pick(roof.roof_facets, "area");

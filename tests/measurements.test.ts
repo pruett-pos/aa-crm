@@ -56,6 +56,41 @@ test("hover: a typical response becomes our measurements", () => {
   });
 });
 
+// The structure of a real Hover response (version 2), copied from the field names and numbers in the production log of the
+// first live pull. Everything sits under `summary`; roof pieces carry `area: null` and the length in `length`; nulls are normal.
+const realHover = () => ({
+  version: 2,
+  summary: {
+    area: { total: { siding: 133, other: 2601 }, facades: { siding: 52, other: 1849 } },
+    roof: {
+      roof_facets: { area: 3579, total: 24, length: null },
+      valleys: { area: null, total: 12, length: 119.5 },
+      rakes: { area: null, total: 4, length: 1 },
+      flashing: { area: null, total: 0, length: 0 },
+      step_flashing: { area: null, total: 4, length: 9.66666667 },
+      gutters_eaves: { area: null, total: 27, length: 267.91666667 },
+      ridges_hips: { area: null, total: 26, length: 297.91666667 },
+      pitch: [{ roof_pitch: "10/12", area: 14, percentage: 0.37 }, { roof_pitch: "6/12", area: 3000, percentage: 83.8 }, { roof_pitch: "4/12", area: 565, percentage: 15.8 }],
+      waste_factor: { area: { zero: 3579, plus_5_percent: 3758, plus_10_percent: 3937 } },
+    },
+    address: "12 Example Street, Town, ST 12345", property_id: 1, external_identifier: null,
+  },
+  footprint: { stories: "2", perimeter: 259.4, area: 2978 },
+});
+
+test("hover: the real response shape (everything under summary, nulls for pieces without an area) is read correctly", () => {
+  assert.deepEqual(parseHoverMeasurements(realHover()), {
+    roofAreaSqft: 3579, facets: 24,
+    pitches: [{ pitch: "10/12", areaSqft: 14, percent: 0.4 }, { pitch: "6/12", areaSqft: 3000, percent: 83.8 }, { pitch: "4/12", areaSqft: 565, percent: 15.8 }],
+    ridgesHipsFt: 297.9, valleysFt: 119.5, rakesFt: 1, eavesFt: 267.9, flashingFt: 0, stepFlashingFt: 9.7, sidingAreaSqft: 133,
+  });
+});
+
+test("hover: a summary with no roof is still refused with the roof reason", () => {
+  assert.throws(() => parseHoverMeasurements({ version: 2, summary: { area: { total: { siding: 5 } } } }), (e: MeasurementError) => e.code === "no_roof_data");
+  assert.throws(() => parseHoverMeasurements({ summary: { roof: { roof_facets: { area: 0 } } } }), (e: MeasurementError) => e.code === "no_roof_area");
+});
+
 test("hover: lengths are rounded to a tenth of a foot and area to a whole foot", () => {
   const m = parseHoverMeasurements(hoverJson({ roof: { roof_facets: { area: 2436.6, total: 14.4 }, ridges_hips: { length: 126.4999, total: 7 } } }));
   assert.deepEqual([m.roofAreaSqft, m.facets, m.ridgesHipsFt], [2437, 14, 126.5]);

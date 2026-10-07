@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { publicUrl } from "./lib/public-url.ts";
 
 const SESSION_COOKIE = "aa_session";
 // /api/leads/website is called by the website's form handler. It has its own secret-header check.
@@ -13,7 +14,7 @@ export function proxy(req: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
-  return NextResponse.redirect(new URL("/login", req.url));
+  return NextResponse.redirect(publicUrl("/login", req));
 }
 
 export const config = {

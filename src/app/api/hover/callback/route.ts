@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/index.ts";
 import { getHoverOAuthConfig, getHoverTokenStore } from "@/lib/hover/index.ts";
 import { exchangeHoverCode } from "@/integrations/hover/oauth.ts";
+import { publicUrl } from "@/lib/public-url.ts";
 
 const safeEqual = (a: string, b: string) => a.length === b.length && a.length > 0 && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -10,7 +11,7 @@ const safeEqual = (a: string, b: string) => a.length === b.length && a.length > 
 // Nothing about the code or the tokens is ever put in a URL or a message shown to the user.
 export async function GET(req: Request) {
   const done = (q: string) => {
-    const res = NextResponse.redirect(new URL(`/settings/hover?${q}`, req.url));
+    const res = NextResponse.redirect(publicUrl(`/settings/hover?${q}`, req));
     res.cookies.set("hover_oauth_state", "", { httpOnly: true, path: "/api/hover", maxAge: 0 });
     return res;
   };

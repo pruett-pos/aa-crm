@@ -7,7 +7,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --experimental-strip-types scripts/setup-db.ts && next start",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "companycam:sync": "node --env-file=.env --experimental-strip-types scripts/companycam-sync.ts",

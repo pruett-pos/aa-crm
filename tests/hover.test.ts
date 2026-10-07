@@ -119,7 +119,7 @@ test("oauth: configuration comes from the environment; incomplete means off", ()
 test("oauth: the authorize link carries the documented parameters and our state, never the secret", () => {
   const u = new URL(hoverAuthorizeUrl(OAUTH, "state-abc"));
   assert.equal(u.origin + u.pathname, "https://hover.to/oauth/authorize");
-  assert.deepEqual([u.searchParams.get("response_type"), u.searchParams.get("client_id"), u.searchParams.get("redirect_uri"), u.searchParams.get("state")], ["code", "cid-123", OAUTH.redirectUri, "state-abc"]);
+  assert.deepEqual([u.searchParams.get("response_type"), u.searchParams.get("client_id"), u.searchParams.get("redirect_uri"), u.searchParams.get("scope"), u.searchParams.get("state")], ["code", "cid-123", OAUTH.redirectUri, "all", "state-abc"]);
   assert.ok(!u.toString().includes("csecret"));
 });
 

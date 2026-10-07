@@ -29,7 +29,9 @@ export async function GET(req: Request) {
     const tokens = await exchangeHoverCode(oauth, code, (u, i) => fetch(u, i));
     await getHoverTokenStore().connect(tokens, check.user.id);
     return done("connected=1");
-  } catch {
+  } catch (e) {
+    // The reason only: HoverError messages carry an HTTP status, never the code, tokens or secret.
+    console.error(`hover callback failed: ${e instanceof Error ? `${e.name}: ${e.message}` : "unknown"}`);
     return done("error=exchange_failed");
   }
 }

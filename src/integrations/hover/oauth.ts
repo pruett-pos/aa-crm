@@ -20,7 +20,7 @@ const base = (c: HoverOAuthConfig) => (c.baseUrl ?? DEFAULT_BASE).replace(/\/+$/
 
 /** Where to send the admin to approve access. `state` ties the return trip to the person who started it. */
 export function hoverAuthorizeUrl(c: HoverOAuthConfig, state: string): string {
-  const q = new URLSearchParams({ response_type: "code", client_id: c.clientId, redirect_uri: c.redirectUri, state });
+  const q = new URLSearchParams({ response_type: "code", client_id: c.clientId, redirect_uri: c.redirectUri, scope: "all", state });
   return `${base(c)}/oauth/authorize?${q.toString()}`;
 }
 

@@ -2,6 +2,7 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": { "buildCommand": "npm run build" },
   "deploy": {
+    "preDeployCommand": "node --experimental-strip-types scripts/setup-db.ts",
     "startCommand": "npm run start",
     "healthcheckPath": "/login",
     "healthcheckTimeout": 60,

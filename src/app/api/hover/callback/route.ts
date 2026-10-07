@@ -20,7 +20,12 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const cookie = req.headers.get("cookie")?.split(/;\s*/).find((c) => c.startsWith("hover_oauth_state="))?.slice("hover_oauth_state=".length) ?? "";
-  if (url.searchParams.get("error")) return done("error=denied");
+  if (url.searchParams.get("error")) {
+    // Hover's own short reason (e.g. access_denied), cut short. It never contains the code or a token.
+    const why = [url.searchParams.get("error"), url.searchParams.get("error_description")].filter(Boolean).join(": ").slice(0, 200);
+    console.error(`hover callback: Hover returned an error: ${why}`);
+    return done("error=denied");
+  }
   if (!oauthTripIsOurs(cookie, url.searchParams.get("state"))) return done("error=bad_state");
   const code = url.searchParams.get("code");
   if (!code) return done("error=no_code");

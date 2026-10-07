@@ -2,7 +2,7 @@ import { HoverError, type HoverJob } from "../../integrations/hover/client.ts";
 import { sameAddress } from "../companycam/address.ts";
 import type { Actor } from "../production/types.ts";
 import { STAGES } from "../rules.ts";
-import { MeasurementError, parseHoverMeasurements, squares, validateMeasurements } from "./parse.ts";
+import { MeasurementError, describeShape, parseHoverMeasurements, squares, validateMeasurements } from "./parse.ts";
 import type { MeasurementJob, MeasurementRecord, MeasurementStore, Measurements } from "./types.ts";
 
 /** The slice of the Hover client this module needs (so tests can fake it). */
@@ -151,7 +151,14 @@ export async function importHoverMeasurements(
   } catch (e) {
     return hoverFailure(e);
   }
-  const m = parseHoverMeasurements(raw);
+  let m;
+  try {
+    m = parseHoverMeasurements(raw);
+  } catch (e) {
+    // So a response shape we did not expect can be fixed from the logs. Field names and numbers only, no strings.
+    console.error(`hover measurements could not be read (${e instanceof Error ? e.message : "unknown"}); shape: ${describeShape(raw).slice(0, 3000)}`);
+    throw e;
+  }
   const rec = await store.insert(job.id, { ...m, source: "hover", hoverJobId: found.id, hoverModelId: model.id, raw, note: null, createdBy: actor.id });
   return toRow(rec);
 }

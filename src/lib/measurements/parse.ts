@@ -81,6 +81,22 @@ export function validateMeasurements(m: Measurements): Measurements {
 }
 
 /**
+ * A log-safe outline of a JSON value for diagnosing a response we couldn't read: field names and types, numbers as they are
+ * (areas and lengths), but strings only by length (they could be an address or a name). Arrays show their first item.
+ */
+export function describeShape(v: unknown, depth = 0): string {
+  if (v === null) return "null";
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "string") return `string(${v.length})`;
+  if (Array.isArray(v)) return depth >= 5 ? `array(${v.length})` : `array(${v.length})[${v.length ? describeShape(v[0], depth + 1) : ""}]`;
+  if (typeof v === "object") {
+    if (depth >= 5) return "{...}";
+    return `{${Object.entries(v as Record<string, unknown>).slice(0, 40).map(([k, x]) => `${k.slice(0, 40)}:${describeShape(x, depth + 1)}`).join(",")}}`;
+  }
+  return typeof v;
+}
+
+/**
  * Read Hover's measurements JSON (full_json). A roof total is required; every other piece is optional and counts as zero
  * when Hover leaves it out (a flat addition has no ridge, say). Anything out of range is refused.
  */

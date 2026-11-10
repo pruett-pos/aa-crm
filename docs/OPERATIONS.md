@@ -120,7 +120,7 @@ Railway's backups live inside Railway. For a copy somewhere else, run the `pg_du
 | `HOVER_CLIENT_ID`, `HOVER_CLIENT_SECRET`, `HOVER_REDIRECT_URI` | Hover | See SPEC decision log. |
 | `COMPANYCAM_ACCESS_TOKEN` | CompanyCam | Expires every 90 days (next: Jan 3, 2027). An expired token now fails the cron run and emails `ALERT_EMAILS`. |
 | `WEBSITE_FORM_SECRET` | website form endpoint | Shared secret header. |
-| `PRUETT_POS_API_URL`, `PRUETT_POS_API_KEY` | nightly price sync (Pruett cron service) | Key equals `PRICE_FEED_KEY` in Pruett POS. |
+| `PRUETT_FEED_URL`, `PRUETT_FEED_KEY`, `PRUETT_PRICE_LEVEL` | nightly price sync (Pruett cron service) and Settings, Product catalog, "Sync from Pruett now" (web service) | Key equals `PRICE_FEED_KEY` in Pruett POS. Level defaults to Builder. The older `PRUETT_POS_API_URL` / `PRUETT_POS_API_KEY` names still work when these are empty. |
 | `QBO_*`, `DEMANDIQ_WEBHOOK_SECRET` | later slices | Not used yet. |
 
 Never put a secret in the repository. `.env.example` lists names only.
@@ -132,7 +132,7 @@ it uses (above), plus `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM` and `ALERT_
 
 | Service | Start command | Suggested schedule (UTC) | Own variables |
 |---|---|---|---|
-| `cron-pruett` | `npm run cron:pruett` | `0 7 * * *` (about 2 am Central) | `PRUETT_POS_API_URL`, `PRUETT_POS_API_KEY` |
+| `cron-pruett` | `npm run cron:pruett` | `0 7,8 * * *` (07:00 and 08:00 UTC; the script runs only the one that is 2 am Central, so it is right in summer and winter) | `DATABASE_URL`, `PRUETT_FEED_URL`, `PRUETT_FEED_KEY`, `PRUETT_PRICE_LEVEL` (optional, default Builder), `ALERT_EMAILS`, `RESEND_API_KEY`, `EMAIL_FROM` |
 | `cron-companycam` | `npm run cron:companycam` | `*/30 * * * *` | `COMPANYCAM_ACCESS_TOKEN` |
 
 `scripts/run-cron.ts` runs the job and watches it. The run **fails** (non-zero exit, shown red in Railway) and **emails
@@ -164,4 +164,4 @@ Other things to watch (set these up once):
 | "Features missing" after an old database | WARNING about baseline in the start log: run section 2.2. |
 | Nobody can sign in | `FIRST_ADMIN_EMAIL` recovery (2.3); check Resend (`EMAIL_FROM` domain verified). |
 | Photos not appearing on new jobs | `cron-companycam` last run; an alert email about the token. |
-| Prices stale | `cron-pruett` last run and its alert email. |
+| Prices stale | `cron-pruett` last run and its alert email; Settings, Product catalog shows the last sync (warnings such as held price moves or a short feed show there). `npm run pruett:sync -- --dry-run` previews. |

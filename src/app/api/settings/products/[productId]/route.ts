@@ -5,7 +5,7 @@ import { allow } from "@/lib/auth/rate-limit.ts";
 import { getCatalogStore } from "@/lib/catalog/index.ts";
 import { catalogErrorResponse } from "@/lib/catalog/http.ts";
 import { changeProduct, removeProduct } from "@/lib/catalog/service.ts";
-import { pruettPriceCents } from "@/lib/rules.ts";
+import { materialUnitCostCents } from "@/lib/rules.ts";
 
 type Ctx = { params: Promise<{ productId: string }> };
 
@@ -30,7 +30,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       summary: `Updated product ${p.sku} (${p.name})${was && was.retailCents !== p.retailCents ? `: retail ${(was.retailCents / 100).toFixed(2)} to ${(p.retailCents / 100).toFixed(2)}` : ""}`,
       details: { from: was && { sku: was.sku, name: was.name, unit: was.unit, retailCents: was.retailCents, specialOrder: was.specialOrder }, to: { sku: p.sku, name: p.name, unit: p.unit, retailCents: p.retailCents, specialOrder: p.specialOrder } },
     });
-    return Response.json({ product: { ...p, builderCents: pruettPriceCents(p.retailCents) } });
+    return Response.json({ product: { ...p, builderCents: materialUnitCostCents(p) } });
   } catch (e) {
     return catalogErrorResponse(e);
   }

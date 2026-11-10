@@ -10,13 +10,13 @@
     "start": "node --experimental-strip-types scripts/migrate.ts --on-start && next start",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
+    "pruett:sync": "node --env-file-if-exists=.env --experimental-strip-types scripts/pruett-sync.ts",
     "companycam:sync": "node --env-file=.env --experimental-strip-types scripts/companycam-sync.ts",
-    "pruett:sync": "node --env-file=.env --experimental-strip-types scripts/pruett-sync.ts",
     "commission:backfill": "node --env-file=.env --experimental-strip-types scripts/backfill-commission.ts",
     "db:migrate": "node --env-file-if-exists=.env --experimental-strip-types scripts/migrate.ts",
     "db:baseline": "node --env-file-if-exists=.env --experimental-strip-types scripts/migrate.ts --baseline",
     "cron:companycam": "node --experimental-strip-types scripts/run-cron.ts companycam scripts/companycam-sync.ts --apply",
-    "cron:pruett": "node --experimental-strip-types scripts/run-cron.ts pruett scripts/pruett-sync.ts --apply"
+    "cron:pruett": "node --experimental-strip-types scripts/run-cron.ts pruett scripts/pruett-sync.ts"
   },
   "engines": {
     "node": ">=22.18 <23"

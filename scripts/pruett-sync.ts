@@ -1,50 +1,44 @@
-// Nightly Pruett price sync: refreshes the retail price of catalog products from Pruett POS's Builder price feed.
-// Meant to run as a Railway cron service (nightly) and by hand.
+// Nightly Pruett price sync. Runs as its own Railway cron service (see the PR / docs/SPEC.md) and by hand:
 //
-// DRY RUN by default: it only lists what would change. Nothing is saved until you add --apply.
-// It only changes prices of products already in the catalog (matched by SKU); it never adds or removes products.
-// Price moves over 50% are listed as "held" and not applied.
+//   npm run pruett:sync                 (only runs when it is 2 AM in Central time; otherwise exits quietly)
+//   npm run pruett:sync -- --now        (run now, whatever the time)
+//   npm run pruett:sync -- --dry-run    (show what would change; writes nothing, logs no run; any time of day)
 //
-//   node --env-file=.env --experimental-strip-types scripts/pruett-sync.ts           (dry run)
-//   node --env-file=.env --experimental-strip-types scripts/pruett-sync.ts --apply   (do it)
-//
+// Railway cron is UTC with no time zone, so the service is scheduled for both 07:00 and 08:00 UTC ("0 7,8 * * *") and
+// this script lets through only the run that falls on 2 AM Central (CDT or CST). Needs DATABASE_URL, PRUETT_FEED_URL and
+// PRUETT_FEED_KEY; PRUETT_PRICE_LEVEL defaults to Builder. Exits 1 when the sync fails so Railway shows the run as failed.
 import { getDb } from "../src/lib/db.ts";
-import { getCatalogStore } from "../src/lib/catalog/index.ts";
-import { PruettError, fetchPruettPrices, pruettConfigFromEnv } from "../src/integrations/pruett/client.ts";
-import { applyPriceSync, feedProblem, planPriceSync, type PriceChange } from "../src/lib/catalog/sync.ts";
+import { previewPruettSync, runPruettSync } from "../src/lib/catalog/index.ts";
+import { isSyncHourCentral } from "../src/lib/catalog/price-sync.ts";
 
-const apply = process.argv.includes("--apply");
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
-const line = (c: PriceChange) => `  ${c.sku} (${c.name}): ${dollars(c.fromCents)} -> ${dollars(c.toCents)}`;
+if (process.argv.includes("--dry-run")) {
+  try {
+    const p = await previewPruettSync();
+    console.log(`dry run: ${p.seen} items in the feed; would add ${p.creates.length}, change ${p.updates.length}, deactivate ${p.deactivateIds.length}, hold ${p.held.length}`);
+    for (const u of p.updates.filter((x) => x.price).slice(0, 50)) console.log(`  ${u.id}: retail ${u.price!.oldRetailCents} -> ${u.price!.newRetailCents}, cost ${u.price!.oldCostCents} -> ${u.price!.newCostCents} (cents)`);
+    for (const h of p.held) console.log(`  HELD ${h.sku}: retail ${h.from} -> ${h.to} (cents)`);
+    for (const w of p.warnings) console.log(`  WARNING: ${w}`);
+    await getDb().$disconnect().catch(() => undefined);
+    process.exit(0);
+  } catch (e) {
+    console.error("dry run failed:", e instanceof Error ? e.message : e);
+    process.exit(1);
+  }
+}
 
-const cfg = pruettConfigFromEnv();
-if (!cfg) {
-  console.log("Pruett POS is not connected: PRUETT_POS_API_URL / PRUETT_POS_API_KEY are not set. Nothing to do.");
+if (!process.argv.includes("--now") && !isSyncHourCentral(new Date())) {
+  console.log("pruett sync: not 2 AM Central; nothing to do (use --now to run anyway)");
   process.exit(0);
 }
 
 let code = 0;
 try {
-  const feed = await fetchPruettPrices(cfg, "Builder");
-  const problem = feedProblem(feed);
-  if (problem) {
-    console.error(problem === "empty_feed"
-      ? "Pruett sent no products. Nothing was changed."
-      : "Pruett's Builder price level has no percentage set, so nothing was changed. Set it in Pruett POS, then run again.");
-    code = 1;
-  } else {
-    const store = getCatalogStore();
-    const plan = planPriceSync(await store.list(), feed);
-    console.log(`Pruett feed ${feed.generatedAt}: ${feed.items.length} items. Catalog: ${plan.changes.length} to change, ${plan.held.length} held, ${plan.unchanged} unchanged, ${plan.notInFeed.length} not in Pruett's feed.`);
-    plan.changes.forEach((c) => console.log(line(c)));
-    if (plan.held.length) { console.log("Held (moved over 50%, check in Pruett POS first):"); plan.held.forEach((c) => console.log(line(c))); }
-    if (plan.notInFeed.length) console.log(`Not in Pruett's feed (kept as is): ${plan.notInFeed.join(", ")}`);
-    if (apply) console.log(`Saved ${await applyPriceSync(store, plan)} price(s).`);
-    else if (plan.changes.length) console.log("Dry run: add --apply to save.");
-  }
+  const run = await runPruettSync({ trigger: "cron" });
+  if (run.status === "error") code = 1;           // "busy" (another run in progress) and ok/warning exit 0
 } catch (e) {
-  console.error(e instanceof PruettError ? `Pruett sync failed (${e.kind}): ${e.message}` : e);
+  console.error("pruett sync: could not run", e instanceof Error ? e.message : e);
   code = 1;
+} finally {
+  await getDb().$disconnect().catch(() => undefined);
 }
-await getDb().$disconnect();
 process.exit(code);

@@ -45,7 +45,8 @@ export async function loadScopeData(store: ScopeStore, user: AuthUser, jobId: st
       user.role === "admin" || (user.role === "estimator" && job.estimatorId === user.id)
         ? estimatorOwnTruck
         : null,
-    products: catalog.map((p) => ({
+    // A product Pruett no longer lists can't be picked for new lines, but stays visible where this job already uses it.
+    products: catalog.filter((p) => p.active !== false || allScopes.some((s) => s.items.some((i) => i.productId === p.id))).map((p) => ({
       id: p.id, name: p.name, unit: p.unit, specialOrder: p.specialOrder, retailCents: p.retailCents,
     })),
     divisions: pmDivisions ? job.divisions.filter((d) => pmDivisions.includes(d)) : job.divisions,

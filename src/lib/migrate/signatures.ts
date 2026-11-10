@@ -29,4 +29,5 @@ export const SIGNATURES: Record<string, Signature> = {
   "014_work_orders": { tables: ["work_orders", "work_order_lines"], indexes: ["work_order_lines_order_idx"] },
   "015_audit_log": { tables: ["audit_log"], indexes: ["audit_log_at_idx", "audit_log_entity_idx"] },
   "016_rate_limits": { tables: ["rate_limits"], indexes: ["rate_limits_reset_idx"] },
+  "017_pruett_sync": { tables: ["pruett_sync_runs", "product_price_history"], columns: ["products.cost_cents", "products.active", "products.source"], indexes: ["pruett_sync_runs_started_idx", "product_price_history_product_idx"] },
 };

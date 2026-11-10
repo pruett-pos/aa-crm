@@ -11,6 +11,11 @@ export type Product = {
   unit: string;
   retailCents: number;
   specialOrder: boolean;
+  /** Pruett's price at our level, set by the nightly sync; null/absent for hand-entered products. */
+  costCents?: number | null;
+  /** False once Pruett stops listing it. Inactive products stay on existing scopes but cannot be picked for new lines. */
+  active?: boolean;
+  source?: "manual" | "pruett";
 };
 
 /** What the estimator sends. Prices are never accepted from the client. */

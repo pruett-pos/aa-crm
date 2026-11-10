@@ -1,8 +1,9 @@
 import { parseDollarsToCents } from "../rules.ts";
 import type { Product } from "../scopes/types.ts";
+import type { PriceSyncPlan, SyncProduct } from "./price-sync.ts";
 
-// The product catalog: the materials a scope can use. An admin adds products by hand; the nightly Pruett sync (sync.ts)
-// keeps their retail prices current by SKU. Prices are Pruett RETAIL in cents; what A&A pays (Builder plan) is worked out in rules.ts.
+// The product catalog: the materials a scope can use. Products Pruett lists are kept current by the nightly price sync
+// (price-sync.ts); an admin can still add products by hand. Prices are Pruett RETAIL in cents; what A&A pays (Builder plan) is worked out in rules.ts.
 
 export type CatalogErrorCode = "invalid_product" | "duplicate_sku" | "not_found" | "in_use";
 
@@ -25,10 +26,12 @@ export interface CatalogStore {
   create(p: ValidProduct): Promise<Product>;
   /** Throws not_found, or duplicate_sku when the new SKU belongs to another product. */
   update(id: string, p: ValidProduct): Promise<Product>;
-  /** Set the retail price of existing products (the Pruett sync). Unknown ids are skipped. Returns how many changed. */
-  updateRetailPrices(updates: { id: string; retailCents: number }[]): Promise<number>;
   /** Throws not_found, or in_use when a scope line or a roofing assembly still points at it. */
   remove(id: string): Promise<void>;
+  /** Every product with the fields the Pruett price sync compares. */
+  listForSync(): Promise<SyncProduct[]>;
+  /** Applies a whole sync plan at once (all or nothing): adds, updates, price history rows, deactivations. */
+  applyPriceSync(plan: PriceSyncPlan, runId: number | null): Promise<void>;
 }
 
 /** Check what the admin typed. Returns the clean values to store; the price is parsed from text, never a float. */

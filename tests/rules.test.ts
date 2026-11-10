@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   grossMarginBps, commissionRateBps, commissionEarnedCents,
   contingencyFeeCents, cancellationFeeCents, depositRequiredCents,
-  pruettPriceCents, routeCall, stagesFor, nextStage,
+  pruettPriceCents, materialUnitCostCents, routeCall, stagesFor, nextStage,
   priceForTargetMarginCents, scopeTotals, scopeCommissionRateBps,
   depositDueCents, balanceDueCents, wouldOverpay, parseDollarsToCents, netPayout, allocateDraws,
   INVOICE_TERMS_DAYS, addDays, invoiceGate, stageAfterPayment,
@@ -207,4 +207,10 @@ test("terms are due on receipt; date arithmetic is exact across month and year e
   assert.equal(addDays("2026-12-31", 10), "2027-01-10");
   assert.equal(addDays("2028-02-28", 1), "2028-02-29");
   assert.equal(addDays("2026-03-01", -1), "2026-02-28");
+});
+test("material cost: Pruett's own price when synced, otherwise retail less the Builder discount", () => {
+  assert.equal(materialUnitCostCents({ retailCents: 10_000 }), 8_800);
+  assert.equal(materialUnitCostCents({ retailCents: 10_000, costCents: null }), 8_800);
+  assert.equal(materialUnitCostCents({ retailCents: 10_000, costCents: 8_799 }), 8_799);
+  assert.equal(materialUnitCostCents({ retailCents: 10_000, costCents: 0 }), 0);
 });

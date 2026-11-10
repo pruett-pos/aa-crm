@@ -179,6 +179,14 @@ export function pruettPriceCents(retailCents: number, plan: PruettPlan = "builde
   return Math.round((retailCents * (10000 - PRUETT_PLANS_BPS[plan])) / 10000);
 }
 
+/**
+ * What A&A pays for one unit of a catalog material. A product synced from Pruett carries Pruett's own price at our level
+ * (`price_cents`), which wins. A hand-entered product has none, so it is the retail price less the Builder discount.
+ */
+export function materialUnitCostCents(p: { retailCents: number; costCents?: number | null }): number {
+  return p.costCents !== null && p.costCents !== undefined ? p.costCents : pruettPriceCents(p.retailCents);
+}
+
 // ---------- Inspections ----------
 export const CONDITION_REPORT_PRICE_CENTS = 24_900; // $249
 

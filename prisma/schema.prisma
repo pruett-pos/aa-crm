@@ -322,9 +322,50 @@ model Product {
   unit         String
   retailCents  BigInt  @map("retail_cents")
   specialOrder Boolean @default(false) @map("special_order")
+  costCents    BigInt? @map("cost_cents")
+  active       Boolean @default(true)
+  source       String  @default("manual")
+  description2 String?
+  category     String?
+  vendor       String?
+  vendorSku    String? @map("vendor_sku")
   items        ScopeItem[]
+  priceHistory ProductPriceHistory[]
 
   @@map("products")
+}
+
+model ProductPriceHistory {
+  id             BigInt   @id @default(autoincrement())
+  productId      String   @map("product_id") @db.Uuid
+  changedAt      DateTime @default(now()) @map("changed_at") @db.Timestamptz()
+  oldCostCents   BigInt?  @map("old_cost_cents")
+  newCostCents   BigInt?  @map("new_cost_cents")
+  oldRetailCents BigInt   @map("old_retail_cents")
+  newRetailCents BigInt   @map("new_retail_cents")
+  syncRunId      BigInt?  @map("sync_run_id")
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, changedAt(sort: Desc)])
+  @@map("product_price_history")
+}
+
+model PruettSyncRun {
+  id               BigInt    @id @default(autoincrement())
+  startedAt        DateTime  @default(now()) @map("started_at") @db.Timestamptz()
+  finishedAt       DateTime? @map("finished_at") @db.Timestamptz()
+  trigger          String
+  triggeredBy      String?   @map("triggered_by") @db.Uuid
+  status           String    @default("running")
+  itemsSeen        Int       @default(0) @map("items_seen")
+  itemsNew         Int       @default(0) @map("items_new")
+  itemsChanged     Int       @default(0) @map("items_changed")
+  itemsDeactivated Int       @default(0) @map("items_deactivated")
+  warning          String?
+  error            String?
+
+  @@index([startedAt(sort: Desc)])
+  @@map("pruett_sync_runs")
 }
 
 model Scope {

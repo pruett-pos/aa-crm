@@ -5,11 +5,11 @@ import { allow } from "@/lib/auth/rate-limit.ts";
 import { getCatalogStore } from "@/lib/catalog/index.ts";
 import { catalogErrorResponse } from "@/lib/catalog/http.ts";
 import { addProduct } from "@/lib/catalog/service.ts";
-import { pruettPriceCents } from "@/lib/rules.ts";
+import { materialUnitCostCents } from "@/lib/rules.ts";
 
 // Role: admin only. The product catalog (materials a scope can use). `builderCents` is what A&A pays at the Builder plan,
 // worked out by the shared rule, never here.
-const view = (p: { id: string; sku: string; name: string; unit: string; retailCents: number; specialOrder: boolean }) => ({ ...p, builderCents: pruettPriceCents(p.retailCents) });
+const view = (p: { id: string; sku: string; name: string; unit: string; retailCents: number; specialOrder: boolean; costCents?: number | null; active?: boolean; source?: string }) => ({ ...p, builderCents: materialUnitCostCents(p) });
 
 export async function GET() {
   const check = await requireRole("admin");

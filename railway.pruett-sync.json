@@ -1,0 +1,8 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "npm run cron:pruett",
+    "cronSchedule": "0 7,8 * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

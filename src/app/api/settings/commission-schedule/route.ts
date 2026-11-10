@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
+import { recordAudit } from "@/lib/audit/index.ts";
 import { getCommissionStore } from "@/lib/commission/index.ts";
 import { setSchedule } from "@/lib/commission/logic.ts";
 import { commissionErrorResponse } from "@/lib/commission/http.ts";
@@ -19,7 +20,9 @@ export async function PUT(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "invalid_body" }, { status: 400 });
   try {
+    const was = await getCommissionStore().getSchedule();
     const s = await setSchedule(getCommissionStore(), { cadence: parsed.data.cadence, anchorDate: parsed.data.anchorDate ?? null, userId: check.user.id });
+    await recordAudit(check.user, { action: "settings.commission_schedule_changed", entityType: "commission_schedule", summary: `Commission pay periods: ${was?.cadence ?? "not set"} to ${s.cadence}`, details: { from: was, to: s } });
     return Response.json({ schedule: s });
   } catch (e) {
     return commissionErrorResponse(e);

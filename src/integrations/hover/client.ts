@@ -7,6 +7,7 @@
 
 const DEFAULT_BASE = "https://hover.to";
 
+import { withTimeout } from "../../lib/http/timeout.ts";
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 export type IntegrationLog = (e: { status: "ok" | "error"; payload?: unknown; error?: string }) => Promise<void>;
 
@@ -69,7 +70,7 @@ export function createHoverClient(cfg: HoverConfig) {
     let res: Response;
     try {
       const token = await cfg.getAccessToken(retried);
-      res = await doFetch(`${base}${path}${qs}`, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(timeoutMs) });
+      res = await withTimeout(timeoutMs, (signal) => doFetch(`${base}${path}${qs}`, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, signal }));
     } catch (e) {
       if (e instanceof HoverError) { await log({ status: "error", payload: { endpoint }, error: e.kind }); throw e; }
       await log({ status: "error", payload: { endpoint }, error: "network" });

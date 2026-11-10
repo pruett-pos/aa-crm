@@ -37,7 +37,9 @@ for (const job of jobs) {
   tally[key] = (tally[key] ?? 0) + 1;
   console.log(`  job ${job.jobNumber}: ${key}`);
   if (r.status === "error" && r.kind === "auth") {
-    console.log("Stopping: CompanyCam rejected the access token. Fix COMPANYCAM_ACCESS_TOKEN, then run again.");
+    // A rejected token needs a person (it expires every 90 days), so this run fails and the cron wrapper sends the alert.
+    console.error("Stopping: CompanyCam rejected the access token. Fix COMPANYCAM_ACCESS_TOKEN, then run again.");
+    process.exitCode = 1;
     break;
   }
   await new Promise((res) => setTimeout(res, 300));   // gentle pacing; rate limits are not documented

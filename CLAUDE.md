@@ -45,7 +45,8 @@ Heritage Navy #1F3A5F, Brass #D4A24C, Warm White #FAF7F0, Ink Black #1A1A1A.
 
 ## Commands
 - `npm test` — business-rule tests (Node built-in test runner)
-- `psql $DATABASE_URL -f db/schema.sql` — create schema on a fresh dev database
+- `npm run db:migrate` — create or update the database (db/schema.sql on an empty one, then db/migrations/*.sql, each exactly once). `-- --dry-run` lists what is pending. New schema changes go in a new `db/migrations/NNN_name.sql` (no BEGIN/COMMIT in the file) plus a signature in `src/lib/migrate/signatures.ts`. See `docs/OPERATIONS.md`.
+- `npm run typecheck` — must pass, with `npm test`, before every PR (CI runs both)
 
 <!-- BEGIN:nextjs-agent-rules -->
 

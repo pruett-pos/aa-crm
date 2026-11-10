@@ -27,6 +27,7 @@ model User {
   email         String   @unique
   phone         String?
   role          UserRole
+  market        Market?
   ownTruck      Boolean  @default(false) @map("own_truck")
   preferredLang String   @default("en") @map("preferred_lang")
   active        Boolean  @default(true)
@@ -606,4 +607,17 @@ model WorkOrderLine {
 
   @@index([workOrderId, sortOrder])
   @@map("work_order_lines")
+}
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  at          DateTime @default(now()) @db.Timestamptz()
+  actorId     String?  @map("actor_id") @db.Uuid
+  actorEmail  String?  @map("actor_email")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  summary     String
+  details     Json?
+
+  @@map("audit_log")
 }

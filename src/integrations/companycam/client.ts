@@ -7,6 +7,7 @@
 
 const DEFAULT_BASE = "https://app.companycam.com/public_api/v1";
 
+import { withTimeout } from "../../lib/http/timeout.ts";
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 export type IntegrationLog = (e: { status: "ok" | "error"; payload?: unknown; error?: string }) => Promise<void>;
 
@@ -97,9 +98,9 @@ export function createCompanyCamClient(cfg: CompanyCamConfig) {
 
     let res: Response;
     try {
-      res = await doFetch(`${base}${path}${qs}`, {
-        method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: AbortSignal.timeout(timeoutMs),
-      });
+      res = await withTimeout(timeoutMs, (signal) => doFetch(`${base}${path}${qs}`, {
+        method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal,
+      }));
     } catch {
       await log({ status: "error", payload: { endpoint }, error: "network" });
       throw new CompanyCamError("network", "Could not reach CompanyCam");

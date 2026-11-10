@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
+import { recordAudit } from "@/lib/audit/index.ts";
 import { allow } from "@/lib/auth/rate-limit.ts";
 import { getAssemblyStore } from "@/lib/estimating/index.ts";
 import { estimatingErrorResponse } from "@/lib/estimating/http.ts";
@@ -47,6 +48,11 @@ export async function PUT(req: Request) {
       coverage: b.coverage ?? null, unitCostCents: b.unitCostCents ?? null, enabled: b.enabled,
     }, products);
     await getAssemblyStore().upsert(row, check.user.id);
+    await recordAudit(check.user, {
+      action: "settings.roofing_assembly_changed", entityType: "roofing_assembly", entityId: `${row.tier}:${row.role}`,
+      summary: `Roofing assembly ${row.tier} / ${row.role} ${row.enabled ? "saved" : "turned off"}`,
+      details: { tier: row.tier, role: row.role, productId: row.productId, coverage: row.coverage, unitCostCents: row.unitCostCents, enabled: row.enabled },
+    });
     return Response.json({ ok: true });
   } catch (e) {
     return estimatingErrorResponse(e);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/index.ts";
+import { recordAudit } from "@/lib/audit/index.ts";
 import { getHoverOAuthConfig, getHoverTokenStore } from "@/lib/hover/index.ts";
 import { exchangeHoverCode } from "@/integrations/hover/oauth.ts";
 import { publicUrl } from "@/lib/public-url.ts";
@@ -32,6 +33,7 @@ export async function GET(req: Request) {
   try {
     const tokens = await exchangeHoverCode(oauth, code, (u, i) => fetch(u, i));
     await getHoverTokenStore().connect(tokens, check.user.id);
+    await recordAudit(check.user, { action: "settings.hover_connected", entityType: "hover", summary: "Connected Hover" });
     return done("connected=1");
   } catch (e) {
     // The reason only: HoverError messages carry an HTTP status, never the code, tokens or secret.

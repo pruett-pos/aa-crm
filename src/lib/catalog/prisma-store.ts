@@ -38,6 +38,13 @@ export function createPrismaCatalogStore(db: PrismaClient): CatalogStore {
       }
     },
 
+    async updateRetailPrices(updates: { id: string; retailCents: number }[]) {
+      const valid = updates.filter((u) => UUID.test(u.id));
+      if (!valid.length) return 0;
+      await db.$transaction(valid.map((u) => db.product.updateMany({ where: { id: u.id }, data: { retailCents: BigInt(u.retailCents) } })));
+      return valid.length;
+    },
+
     async remove(id: string) {
       if (!UUID.test(id) || !(await db.product.findUnique({ where: { id } }))) throw new CatalogError("not_found");
       const inUse = (await db.scopeItem.count({ where: { productId: id } })) + (await db.roofingAssemblyLine.count({ where: { productId: id } }));

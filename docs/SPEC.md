@@ -132,6 +132,7 @@ outstanding depreciation, AR aging, commissions owed.
 
 - 2026-10: Stack = Next.js + Postgres on Railway, alongside Pruett POS.
 - 2026-10: Business rules centralised in `src/lib/rules.ts`.
+- 2026-11: **Pruett price sync** (`scripts/pruett-sync.ts`, `npm run pruett:sync`, `src/integrations/pruett/client.ts`, `src/lib/catalog/sync.ts`). Reads Pruett POS's read-only feed `GET <PRUETT_POS_API_URL>/feed/prices?level=Builder` with the bearer key `PRUETT_POS_API_KEY` (the same value as `PRICE_FEED_KEY` in Pruett POS). It updates only the RETAIL price of products already in the catalog, matched by SKU ignoring case; it never adds or removes products and never touches name, unit or the special-order flag. The Builder price is still worked out by `pruettPriceCents` (feed `price_cents` is not stored). Safety: dry run unless `--apply`; refused when the feed is empty or Pruett's Builder level has no % set; a price move over 50% is listed as held and not applied; catalog SKUs missing from the feed are listed and kept. Existing scopes keep the cost they were built with. Run it nightly as a Railway cron service (`npm run pruett:sync -- --apply`, but with the variables set on that service instead of a `.env` file: `node --experimental-strip-types scripts/pruett-sync.ts --apply`).
 - 2026-10 (open questions resolved by AL):
   1. Commission uses full 2-point steps: 39% GM still pays 8%. No code change.
   2. Contingency fee = 10% of what insurance has already paid (ACV, then released

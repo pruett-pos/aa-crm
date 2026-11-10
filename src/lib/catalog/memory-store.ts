@@ -30,6 +30,15 @@ export class MemoryCatalogStore implements CatalogStore {
     return { ...this.products[i] };
   }
 
+  async updateRetailPrices(updates: { id: string; retailCents: number }[]) {
+    let n = 0;
+    for (const u of updates) {
+      const p = this.products.find((x) => x.id === u.id);
+      if (p) { p.retailCents = u.retailCents; n++; }
+    }
+    return n;
+  }
+
   async remove(id: string) {
     const i = this.products.findIndex((x) => x.id === id);
     if (i < 0) throw new CatalogError("not_found");

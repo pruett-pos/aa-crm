@@ -9,7 +9,7 @@ import { changeUser } from "@/lib/users/service.ts";
 const Body = z.object({
   fullName: z.string().max(200).optional(), email: z.string().max(254).optional(), phone: z.string().max(40).nullish(),
   role: z.string().max(40).optional(), market: z.string().max(40).nullish(), divisions: z.array(z.string().max(40)).max(10).optional(),
-  active: z.boolean().optional(),
+  active: z.boolean().optional(), ownTruck: z.boolean().optional(),
 }).strict();
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {

@@ -6,7 +6,7 @@ import { UserError } from "./service.ts";
 import type { AdminUser, DivisionHolder, NewUserData, UserAdminStore, UserPatch } from "./types.ts";
 
 type Row = {
-  id: string; fullName: string; email: string; phone: string | null; role: AdminUser["role"]; market: Market | null; active: boolean; createdAt: Date;
+  id: string; fullName: string; email: string; phone: string | null; role: AdminUser["role"]; market: Market | null; active: boolean; createdAt: Date; ownTruck: boolean;
 };
 const UUID = /^[0-9a-f-]{36}$/i;
 const codeOf = (e: unknown) => (e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "");
@@ -43,7 +43,7 @@ export function createPrismaUserAdminStore(db: PrismaClient): UserAdminStore {
     async create(data: NewUserData, divisions, audits, actor: AuditActor) {
       try {
         const id = await db.$transaction(async (tx) => {
-          const u = await tx.user.create({ data: { fullName: data.fullName, email: data.email, phone: data.phone, role: data.role, market: data.market, active: data.active } });
+          const u = await tx.user.create({ data: { fullName: data.fullName, email: data.email, phone: data.phone, role: data.role, market: data.market, active: data.active, ownTruck: data.ownTruck ?? false } });
           if (divisions.length && data.market) {
             await tx.divisionManager.createMany({ data: divisions.map((division) => ({ division, market: data.market as Market, userId: u.id })) });
           }

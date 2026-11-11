@@ -142,3 +142,53 @@ test("moving a PM to another market moves their divisions with them, and checks 
   assert.deepEqual(store.managers.filter((m) => m.userId === a.id), [{ division: "roofing", market: "nw_arkansas", userId: a.id }]);
   assert.equal(r.market, "nw_arkansas");
 });
+
+// ---------- truck setting (estimator commission: company truck 8% base, own truck 10% base) ----------
+const estimator = async (store: MemoryUserAdminStore, actor: AuthUser, over: Record<string, unknown> = {}) =>
+  addUser(store, actor, { fullName: "Est One", email: `est${store.users.length}@x.com`, role: "estimator", ...over });
+
+test("truck: an admin can switch an estimator to own truck and back; each change is audited with who, old and new", async () => {
+  const { store, actor } = setup();
+  const e = await estimator(store, actor);
+  assert.equal(e.ownTruck, false, "company truck is the default");
+  const on = await changeUser(store, actor, e.id, { ownTruck: true });
+  assert.equal(on.ownTruck, true);
+  const off = await changeUser(store, actor, e.id, { ownTruck: false });
+  assert.equal(off.ownTruck, false);
+  const rows = store.audits.filter((a) => a.action === "user.truck_changed");
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.details), [{ from: false, to: true }, { from: true, to: false }]);
+  assert.ok(rows.every((r) => r.actorId === actor.id && r.entityId === e.id && r.at instanceof Date));
+  assert.match(rows[0].summary, /company truck \(8% base\) to own truck \(10% base\)/);
+});
+
+test("truck: only an admin can change it; the setting is unchanged and nothing is audited", async () => {
+  const { store, actor } = setup();
+  const e = await estimator(store, actor);
+  const before = store.audits.length;
+  for (const role of ROLES.filter((r) => r !== "admin")) {
+    assert.equal(await code(changeUser(store, asRole(actor, role), e.id, { ownTruck: true })), "forbidden", role);
+  }
+  assert.equal(store.users.find((u) => u.id === e.id)!.ownTruck, false);
+  assert.equal(store.audits.length, before);
+});
+
+test("truck: setting the same value changes nothing and writes no audit row", async () => {
+  const { store, actor } = setup();
+  const e = await estimator(store, actor, { ownTruck: true });
+  const n = store.audits.length;
+  await changeUser(store, actor, e.id, { ownTruck: true });
+  assert.equal(store.audits.length, n);
+});
+
+test("truck: only estimators have it; leaving the estimator role clears it (audited)", async () => {
+  const { store, actor } = setup();
+  const csr = await addUser(store, actor, { fullName: "Csr One", email: "csr@x.com", role: "csr" });
+  assert.equal(await code(changeUser(store, actor, csr.id, { ownTruck: true })), "not_an_estimator");
+  assert.equal(await code(addUser(store, actor, { fullName: "Csr Two", email: "csr2@x.com", role: "csr", ownTruck: true })), "not_an_estimator");
+  const e = await estimator(store, actor, { ownTruck: true });
+  assert.equal(e.ownTruck, true);
+  const moved = await changeUser(store, actor, e.id, { role: "csr" });
+  assert.equal(moved.ownTruck, false);
+  assert.ok(store.audits.some((a) => a.action === "user.truck_changed" && (a.details as { to: boolean }).to === false));
+});

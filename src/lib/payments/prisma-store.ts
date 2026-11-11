@@ -46,6 +46,12 @@ export function createPrismaPaymentStore(db: PrismaClient): PaymentStore {
   return {
     getPaymentJob: (jobId) => loadJob(db, jobId),
 
+    async ledgerEarnedCents(jobId) {
+      if (!UUID.test(jobId)) return 0;
+      const r = await db.commissionEntry.aggregate({ where: { jobId, kind: { in: ["earned", "reversal"] } }, _sum: { amountCents: true } });
+      return Number(r._sum.amountCents ?? 0);
+    },
+
     async listPayments(jobId) {
       if (!UUID.test(jobId)) return [];
       const rows = await db.payment.findMany({ where: { jobId }, select: LIST_SELECT, orderBy: { receivedAt: "asc" } });

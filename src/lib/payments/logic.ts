@@ -78,7 +78,11 @@ export function summarize(job: PaymentJob, payments: PaymentRecord[]): PaymentSu
   };
 }
 
-/** Commission earned so far: paid on amount collected, at the job's margin. Null if margin is unknown. */
+/**
+ * An ESTIMATE of commission on an amount collected, at the job's margin and the estimator's CURRENT truck setting.
+ * Null if margin is unknown. Do not show it as "earned so far": the ledger is the record (see `ledgerEarnedCents`),
+ * because each ledger entry was priced with the truck setting in force when its payment was collected.
+ */
 export function commissionEarnedSoFar(job: PaymentJob, collectedCents: number): { rateMarginBps: number; earnedCents: number } | null {
   if (!job.contractCents || job.costCents === null) return null;
   const marginBps = grossMarginBps(job.contractCents, job.costCents);

@@ -9,10 +9,10 @@ const DIVISIONS = ["roofing", "siding", "gutters", "windows_doors", "insulation"
 const roleLabel = (r: string) => (en.roles as Record<string, string>)[r] ?? r;
 const pretty = (s: string) => s.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-type U = { id: string; fullName: string; email: string; phone: string | null; role: string; market: string | null; active: boolean; divisions: string[] };
-type Form = { fullName: string; email: string; phone: string; role: string; market: string; divisions: string[] };
-const empty: Form = { fullName: "", email: "", phone: "", role: "estimator", market: "", divisions: [] };
-const formOf = (u: U): Form => ({ fullName: u.fullName, email: u.email, phone: u.phone ?? "", role: u.role, market: u.market ?? "", divisions: u.divisions });
+type U = { id: string; fullName: string; email: string; phone: string | null; role: string; market: string | null; active: boolean; divisions: string[]; ownTruck: boolean };
+type Form = { fullName: string; email: string; phone: string; role: string; market: string; divisions: string[]; ownTruck: boolean };
+const empty: Form = { fullName: "", email: "", phone: "", role: "estimator", market: "", divisions: [], ownTruck: false };
+const formOf = (u: U): Form => ({ fullName: u.fullName, email: u.email, phone: u.phone ?? "", role: u.role, market: u.market ?? "", divisions: u.divisions, ownTruck: u.ownTruck });
 const errText = (code?: string) => en.users.errors[code ?? ""] ?? en.users.errors.generic;
 
 export function UsersClient({ initial, meId }: { initial: U[]; meId: string }) {
@@ -41,7 +41,7 @@ export function UsersClient({ initial, meId }: { initial: U[]; meId: string }) {
       <div><label htmlFor={`${p}phone`}>{en.users.phone}</label><input id={`${p}phone`} inputMode="tel" value={f.phone} maxLength={20} onChange={(e) => set({ ...f, phone: e.target.value })} /></div>
       <div>
         <label htmlFor={`${p}role`}>{en.users.role}</label>
-        <select id={`${p}role`} value={f.role} disabled={isSelf} onChange={(e) => set({ ...f, role: e.target.value, divisions: e.target.value === "production_manager" ? f.divisions : [] })}>
+        <select id={`${p}role`} value={f.role} disabled={isSelf} onChange={(e) => set({ ...f, role: e.target.value, divisions: e.target.value === "production_manager" ? f.divisions : [], ownTruck: e.target.value === "estimator" ? f.ownTruck : false })}>
           {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
         </select>
       </div>
@@ -52,6 +52,12 @@ export function UsersClient({ initial, meId }: { initial: U[]; meId: string }) {
           {MARKETS.map((m) => <option key={m} value={m}>{pretty(m)}</option>)}
         </select>
       </div>
+      {f.role === "estimator" && (
+        <div>
+          <label className="check"><input type="checkbox" checked={f.ownTruck} onChange={(e) => set({ ...f, ownTruck: e.target.checked })} /> {en.users.ownTruck}</label>
+          <p className="muted">{en.users.ownTruckHelp}</p>
+        </div>
+      )}
       {f.role === "production_manager" && (
         <fieldset>
           <legend>{en.users.divisions}</legend>
@@ -65,7 +71,7 @@ export function UsersClient({ initial, meId }: { initial: U[]; meId: string }) {
       )}
     </>
   );
-  const payload = (f: Form) => ({ fullName: f.fullName, email: f.email, phone: f.phone, role: f.role, market: f.market || null, divisions: f.role === "production_manager" ? f.divisions : [] });
+  const payload = (f: Form) => ({ fullName: f.fullName, email: f.email, phone: f.phone, role: f.role, market: f.market || null, divisions: f.role === "production_manager" ? f.divisions : [], ownTruck: f.role === "estimator" ? f.ownTruck : undefined });
 
   return (
     <div>
@@ -97,6 +103,7 @@ export function UsersClient({ initial, meId }: { initial: U[]; meId: string }) {
                     {fields(edit, setEdit, `e${u.id}`, u.id === meId)}
                     <p>
                       <button type="button" disabled={busy} onClick={async () => {
+                        if (u.role === "estimator" && edit.role === "estimator" && edit.ownTruck !== u.ownTruck && !window.confirm(en.users.confirmTruck(u.fullName, edit.ownTruck))) return;
                         const r = await call(`/api/settings/users/${u.id}`, "PATCH", payload(edit));
                         if (r.ok && r.user) { put(r.user); setEditId(null); setMsg({ ok: true, text: en.users.saved }); }
                       }}>{busy ? en.users.saving : en.users.save}</button>{" "}
@@ -109,7 +116,7 @@ export function UsersClient({ initial, meId }: { initial: U[]; meId: string }) {
                       {u.fullName} {u.id === meId && <span className="muted">{en.users.you}</span>}
                       <br /><span className="muted">{u.email}{u.phone ? ` · ${u.phone}` : ""}</span>
                     </td>
-                    <td>{roleLabel(u.role)}{u.divisions.length > 0 && <><br /><span className="muted">{u.divisions.map(pretty).join(", ")}</span></>}</td>
+                    <td>{roleLabel(u.role)}{u.role === "estimator" && <><br /><span className="muted">{u.ownTruck ? en.users.truckOwn : en.users.truckCompany}</span></>}{u.divisions.length > 0 && <><br /><span className="muted">{u.divisions.map(pretty).join(", ")}</span></>}</td>
                     <td>{u.market ? pretty(u.market) : "-"}</td>
                     <td>{u.active ? en.users.active : en.users.inactive}</td>
                     <td>

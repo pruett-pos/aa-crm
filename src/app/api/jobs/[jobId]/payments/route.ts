@@ -21,7 +21,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 
   const payments = await store.listPayments(jobId);
   const summary = summarize(job, payments);
-  const commission = canSeeCommissionEarned(check.user, job) ? commissionEarnedSoFar(job, summary.collectedCents) : null;
+  // Earned so far = what the ledger booked (each payment priced at the truck setting in force when it was collected).
+  const commission = canSeeCommissionEarned(check.user, job) && commissionEarnedSoFar(job, summary.collectedCents) ? { earnedCents: await store.ledgerEarnedCents(jobId) } : null;
   return Response.json({
     job: { id: job.id, jobNumber: job.jobNumber, stage: job.stage },
     summary,

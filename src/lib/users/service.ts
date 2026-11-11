@@ -11,7 +11,7 @@ import type { AdminUser, NewUserData, UserAdminStore, UserPatch } from "./types.
 export type UserErrorCode =
   | "forbidden" | "not_found" | "invalid_name" | "invalid_email" | "invalid_phone" | "invalid_role" | "invalid_market"
   | "invalid_division" | "market_required" | "duplicate_email" | "division_taken" | "cannot_change_own_role"
-  | "cannot_deactivate_self" | "cannot_change_own_email" | "not_a_manager";
+  | "cannot_deactivate_self" | "cannot_change_own_email" | "not_a_manager" | "not_an_estimator";
 
 export class UserError extends Error {
   code: UserErrorCode;
@@ -79,7 +79,7 @@ async function assertDivisionsFree(store: UserAdminStore, market: Market, divisi
 
 const who = (u: { fullName: string; email: string }) => `${u.fullName} (${u.email})`;
 
-export type NewUserInput = { fullName: string; email: string; phone?: string | null; role: string; market?: string | null; divisions?: string[]; active?: boolean };
+export type NewUserInput = { fullName: string; email: string; phone?: string | null; role: string; market?: string | null; divisions?: string[]; active?: boolean; ownTruck?: boolean };
 
 export async function addUser(store: UserAdminStore, actor: AuthUser, input: NewUserInput): Promise<AdminUser> {
   guard(actor);
@@ -87,20 +87,24 @@ export async function addUser(store: UserAdminStore, actor: AuthUser, input: New
   const data: NewUserData = {
     fullName: cleanName(input.fullName), email: cleanEmail(input.email), phone: cleanPhone(input.phone),
     role, market: cleanMarket(input.market), active: input.active ?? true,
+    ownTruck: false,
   };
+  if (input.ownTruck && role !== "estimator") throw new UserError("not_an_estimator", "Only an estimator has a truck setting");
+  if (role === "estimator" && input.ownTruck) data.ownTruck = true;
   const divisions = role === "production_manager" ? cleanDivisions(input.divisions) : [];
   if (role === "production_manager" && divisions.length && !data.market) throw new UserError("market_required", "Pick a market for a Production Manager who runs divisions");
   if (await store.findByEmail(data.email)) throw new UserError("duplicate_email", "Someone with that email already exists");
   if (divisions.length && data.market) await assertDivisionsFree(store, data.market, divisions);
   const audit: AuditEntry = {
     action: "user.created", entityType: "user", summary: `Added ${who(data)} as ${ROLE_LABELS[role]}`,
-    details: { role, market: data.market, active: data.active, divisions },
+    details: { role, market: data.market, active: data.active, divisions, ...(role === "estimator" ? { ownTruck: data.ownTruck ?? false } : {}) },
   };
   return store.create(data, divisions, [audit], { id: actor.id, email: actor.email });
 }
 
 export type UserChange = {
   fullName?: string; email?: string; phone?: string | null; role?: string; market?: string | null; divisions?: string[]; active?: boolean;
+  ownTruck?: boolean;
 };
 
 /** Changes one person. Admin only. An admin cannot change their own role, deactivate themselves, or change their own email. */
@@ -148,6 +152,13 @@ export async function changeUser(store: UserAdminStore, actor: AuthUser, id: str
   }
 
   const role = patch.role ?? before.role;
+  if (change.ownTruck !== undefined && change.ownTruck !== before.ownTruck) {
+    // Only estimators earn commission by this setting. (A role change in the same request counts.)
+    if (role !== "estimator") throw new UserError("not_an_estimator", "Only an estimator has a truck setting");
+    patch.ownTruck = change.ownTruck;
+  }
+  // Leaving the estimator role clears the truck setting, so a stale "own truck" cannot silently apply if they become an estimator again.
+  if (role !== "estimator" && before.ownTruck && patch.ownTruck === undefined) patch.ownTruck = false;
   const active = patch.active ?? before.active;
   const market = patch.market !== undefined ? patch.market : before.market;
 
@@ -186,6 +197,14 @@ export async function changeUser(store: UserAdminStore, actor: AuthUser, id: str
   }
   if (Object.keys(profile).length) {
     audits.push({ ...base, action: "user.updated", summary: `Updated ${Object.keys(profile).join(", ")} for ${who(before)}`, details: profile });
+  }
+  if (patch.ownTruck !== undefined) {
+    const label = (b: boolean) => (b ? "own truck (10% base)" : "company truck (8% base)");
+    audits.push({
+      ...base, action: "user.truck_changed",
+      summary: `Changed ${who(before)} from ${label(before.ownTruck)} to ${label(patch.ownTruck)}. Applies to commission on payments collected from now on; earlier entries are not recalculated.`,
+      details: { from: before.ownTruck, to: patch.ownTruck },
+    });
   }
   if (divisionChange) {
     audits.push({ ...base, action: "user.divisions_changed", summary: `Divisions for ${who(before)}: ${divisionChange.list.length ? divisionChange.list.join(", ") : "none"}`, details: { from: before.divisions, to: divisionChange.list, market: market } });

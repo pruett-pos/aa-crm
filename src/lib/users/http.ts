@@ -2,7 +2,7 @@ import { UserError } from "./service.ts";
 
 const STATUS: Record<string, number> = {
   forbidden: 403, not_found: 404, duplicate_email: 409, division_taken: 409,
-  cannot_change_own_role: 409, cannot_deactivate_self: 409, cannot_change_own_email: 409,
+  cannot_change_own_role: 409, cannot_deactivate_self: 409, cannot_change_own_email: 409, not_an_estimator: 422,
 };
 
 export function userErrorResponse(e: unknown): Response {

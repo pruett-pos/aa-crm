@@ -18,7 +18,7 @@ export async function GET() {
 
 const Body = z.object({
   fullName: z.string().max(200), email: z.string().max(254), phone: z.string().max(40).nullish(), role: z.string().max(40),
-  market: z.string().max(40).nullish(), divisions: z.array(z.string().max(40)).max(10).optional(), active: z.boolean().optional(),
+  market: z.string().max(40).nullish(), divisions: z.array(z.string().max(40)).max(10).optional(), active: z.boolean().optional(), ownTruck: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {

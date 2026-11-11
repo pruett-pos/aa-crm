@@ -6,11 +6,13 @@ import type { AuditActor, AuditEntry } from "../audit/index.ts";
 export type AdminUser = {
   id: string; fullName: string; email: string; phone: string | null; role: Role; market: Market | null; active: boolean;
   createdAt: Date;
+  /** Estimators only: true = uses own truck and fuel (10% base commission), false = company truck (8%). */
+  ownTruck: boolean;
   /** Divisions this person runs as Production Manager (division_managers rows). Empty for every other role. */
   divisions: Division[];
 };
 
-export type NewUserData = { fullName: string; email: string; phone: string | null; role: Role; market: Market | null; active: boolean };
+export type NewUserData = { fullName: string; email: string; phone: string | null; role: Role; market: Market | null; active: boolean; ownTruck?: boolean };
 export type UserPatch = Partial<NewUserData>;
 
 export type DivisionHolder = { division: Division; userId: string; fullName: string };

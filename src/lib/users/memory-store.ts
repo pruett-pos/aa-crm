@@ -13,7 +13,7 @@ export class MemoryUserAdminStore implements UserAdminStore {
   private n = 0;
 
   seed(u: Partial<AdminUser> & { fullName: string; email: string; role: AdminUser["role"] }): AdminUser {
-    const user: AdminUser = { id: `u${++this.n}`, phone: null, market: null, active: true, createdAt: new Date(), divisions: [], ...u };
+    const user: AdminUser = { id: `u${++this.n}`, phone: null, market: null, active: true, createdAt: new Date(), ownTruck: false, divisions: [], ...u };
     this.users.push(user);
     for (const d of user.divisions) this.managers.push({ division: d, market: user.market as Market, userId: user.id });
     return user;

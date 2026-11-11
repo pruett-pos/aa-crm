@@ -18,6 +18,9 @@ export class MemoryPaymentStore implements PaymentStore {
   async listPayments(jobId: string) {
     return this.rows.filter((r) => r.jobId === jobId).map(({ photo: _p, voidedBy: _v, ...rec }) => rec);
   }
+  async ledgerEarnedCents(jobId: string) {
+    return this.commission.filter((e) => e.jobId === jobId && (e.kind === "earned" || e.kind === "reversal")).reduce((n, e) => n + e.amountCents, 0);
+  }
   async getPayment(id: string) {
     const r = this.rows.find((x) => x.id === id);
     if (!r) return null;

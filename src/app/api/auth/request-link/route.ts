@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createLoginToken, normalizeEmail } from "@/lib/auth/core.ts";
 import { getStore } from "@/lib/auth/index.ts";
-import { allow } from "@/lib/auth/rate-limit.ts";
+import { allowPersistent } from "@/lib/auth/rate-limit-db.ts";
+import { getRateLimitStore } from "@/lib/auth/rate-limit-store.ts";
 import { sendLoginLink } from "@/integrations/resend/index.ts";
 
 const Body = z.object({ email: z.string().email().max(254) });
@@ -15,7 +16,13 @@ export async function POST(req: Request) {
 
   const email = normalizeEmail(parsed.data.email);
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (!allow(`email:${email}`, 5, WINDOW_MS) || !allow(`ip:${ip}`, 20, WINDOW_MS)) {
+  // Kept in Postgres so the counts survive a deploy. Both counters always tick (no short-circuit), so a blocked email still counts against the IP.
+  const store = getRateLimitStore();
+  const [emailOk, ipOk] = await Promise.all([
+    allowPersistent(store, `login:email:${email}`, 5, WINDOW_MS),
+    allowPersistent(store, `login:ip:${ip}`, 20, WINDOW_MS),
+  ]);
+  if (!emailOk || !ipOk) {
     return Response.json({ error: "rate_limited" }, { status: 429 });
   }
 

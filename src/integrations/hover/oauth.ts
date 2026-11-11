@@ -3,6 +3,7 @@
 // Access tokens last 2 hours. The refresh token ROTATES: each refresh returns a new one and the old one stops working,
 // so a refresh must be saved right away and never run twice at once (see src/lib/hover/tokens.ts).
 import { HoverError, type FetchLike } from "./client.ts";
+import { withTimeout } from "../../lib/http/timeout.ts";
 
 const DEFAULT_BASE = "https://hover.to";
 
@@ -27,10 +28,10 @@ export function hoverAuthorizeUrl(c: HoverOAuthConfig, state: string): string {
 async function tokenCall(c: HoverOAuthConfig, body: Record<string, string>, doFetch: FetchLike, now: Date, timeoutMs = 10_000): Promise<HoverTokens> {
   let res: Response;
   try {
-    res = await doFetch(`${base(c)}/oauth/token`, {
+    res = await withTimeout(timeoutMs, (signal) => doFetch(`${base(c)}/oauth/token`, {
       method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ client_id: c.clientId, client_secret: c.clientSecret, ...body }), signal: AbortSignal.timeout(timeoutMs),
-    });
+      body: JSON.stringify({ client_id: c.clientId, client_secret: c.clientSecret, ...body }), signal,
+    }));
   } catch {
     throw new HoverError("network", "Could not reach Hover");
   }

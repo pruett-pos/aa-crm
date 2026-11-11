@@ -23,7 +23,8 @@ export default async function PaymentsPage({ params }: { params: Promise<{ jobId
 
   const payments = await store.listPayments(jobId);
   const summary = summarize(job, payments);
-  const commission = canSeeCommissionEarned(user, job) ? commissionEarnedSoFar(job, summary.collectedCents) : null;
+  // Earned so far = what the ledger booked (each payment priced at the truck setting in force when it was collected).
+  const commission = canSeeCommissionEarned(user, job) && commissionEarnedSoFar(job, summary.collectedCents) ? { earnedCents: await store.ledgerEarnedCents(jobId) } : null;
 
   return (
     <>

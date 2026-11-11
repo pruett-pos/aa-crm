@@ -82,3 +82,27 @@ export async function sendLoginLink(to: string, link: string): Promise<void> {
   });
   if (error) throw new Error(`Resend failed: ${error.message}`);
 }
+
+/** Parse ALERT_EMAILS ("a@x.com, b@y.com") into a clean list. Anything that isn't shaped like an address is dropped. */
+export function parseAlertEmails(raw: string | undefined): string[] {
+  return (raw ?? "").split(/[,;\s]+/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+}
+
+/**
+ * Tell the people in ALERT_EMAILS that a scheduled job failed. Throws on failure; the caller logs it and still exits non-zero.
+ * Returns false (without sending) when there is nobody to tell or email is not configured.
+ */
+export async function sendCronFailureAlert(a: { job: string; reason: string; outputTail: string; at: Date }): Promise<boolean> {
+  const to = parseAlertEmails(process.env.ALERT_EMAILS);
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!to.length || !apiKey || !from) return false;
+  const { error } = await new Resend(apiKey).emails.send({
+    from,
+    to,
+    subject: `[A&A CRM] Scheduled job failed: ${a.job}`,
+    text: `The scheduled job "${a.job}" failed at ${a.at.toISOString()}.\n\n${a.reason}\n\nLast lines of output:\n${a.outputTail || "(none)"}\n\nSee the service's logs in Railway for the full output. Search for: cron.failed`,
+  });
+  if (error) throw new Error(`Resend failed: ${error.message}`);
+  return true;
+}

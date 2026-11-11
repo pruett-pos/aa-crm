@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
+import { recordAudit } from "@/lib/audit/index.ts";
 import { getLeadStore } from "@/lib/leads/index.ts";
 import { setMarketingSpend } from "@/lib/leads/logic.ts";
 import { leadErrorResponse } from "@/lib/leads/http.ts";
@@ -24,6 +25,7 @@ export async function PUT(req: Request) {
   if (!parsed.success) return Response.json({ error: "invalid_body" }, { status: 400 });
   try {
     const r = await setMarketingSpend(getLeadStore(), { source: parsed.data.source, month: parsed.data.month, amountText: parsed.data.amount });
+    await recordAudit(check.user, { action: "settings.marketing_spend_set", entityType: "marketing_spend", entityId: `${r.source}:${r.month}`, summary: `Ad spend for ${r.source}, ${r.month}: ${(r.spendCents / 100).toFixed(2)}`, details: r });
     return Response.json(r);
   } catch (e) {
     return leadErrorResponse(e);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
+import { recordAudit } from "@/lib/audit/index.ts";
 import { allow } from "@/lib/auth/rate-limit.ts";
 import { getCatalogStore } from "@/lib/catalog/index.ts";
 import { catalogErrorResponse } from "@/lib/catalog/http.ts";
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
   const b = parsed.data;
   try {
     const p = await addProduct(getCatalogStore(), { sku: b.sku, name: b.name, unit: b.unit, priceText: b.price, specialOrder: b.specialOrder });
+    await recordAudit(check.user, { action: "settings.product_added", entityType: "product", entityId: p.id, summary: `Added product ${p.sku} (${p.name}) at ${(p.retailCents / 100).toFixed(2)} retail`, details: { sku: p.sku, name: p.name, unit: p.unit, retailCents: p.retailCents, specialOrder: p.specialOrder } });
     return Response.json({ product: view(p) }, { status: 201 });
   } catch (e) {
     return catalogErrorResponse(e);

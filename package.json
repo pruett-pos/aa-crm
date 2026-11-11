@@ -7,15 +7,19 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "dev": "next dev",
     "build": "next build",
-    "start": "node --experimental-strip-types scripts/setup-db.ts && next start",
+    "start": "node --experimental-strip-types scripts/migrate.ts --on-start && next start",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "companycam:sync": "node --env-file=.env --experimental-strip-types scripts/companycam-sync.ts",
     "pruett:sync": "node --env-file=.env --experimental-strip-types scripts/pruett-sync.ts",
-    "commission:backfill": "node --env-file=.env --experimental-strip-types scripts/backfill-commission.ts"
+    "commission:backfill": "node --env-file=.env --experimental-strip-types scripts/backfill-commission.ts",
+    "db:migrate": "node --env-file-if-exists=.env --experimental-strip-types scripts/migrate.ts",
+    "db:baseline": "node --env-file-if-exists=.env --experimental-strip-types scripts/migrate.ts --baseline",
+    "cron:companycam": "node --experimental-strip-types scripts/run-cron.ts companycam scripts/companycam-sync.ts --apply",
+    "cron:pruett": "node --experimental-strip-types scripts/run-cron.ts pruett scripts/pruett-sync.ts --apply"
   },
   "engines": {
-    "node": ">=22.18"
+    "node": ">=22.18 <23"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

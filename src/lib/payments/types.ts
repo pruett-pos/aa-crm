@@ -65,6 +65,8 @@ export interface PaymentTx {
 export interface PaymentStore {
   getPaymentJob(jobId: string): Promise<PaymentJob | null>;
   listPayments(jobId: string): Promise<PaymentRecord[]>;
+  /** Commission actually booked for this job: the sum of its earned and reversal ledger entries (each priced when its payment was collected). */
+  ledgerEarnedCents(jobId: string): Promise<number>;
   getPayment(id: string): Promise<PaymentRecord | null>;
   getPhoto(id: string): Promise<{ data: Uint8Array; mime: string } | null>;
   transaction<T>(jobId: string, fn: (tx: PaymentTx) => Promise<T>): Promise<T>;

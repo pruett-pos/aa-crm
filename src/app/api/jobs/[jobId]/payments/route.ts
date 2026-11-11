@@ -6,6 +6,7 @@ import {
 } from "@/lib/payments/logic.ts";
 import { paymentErrorResponse } from "@/lib/payments/http.ts";
 import type { PaymentType } from "@/lib/payments/types.ts";
+import { triggerQboSync } from "@/lib/quickbooks/index.ts";
 
 type Ctx = { params: Promise<{ jobId: string }> };
 
@@ -64,6 +65,7 @@ export async function POST(req: Request, { params }: Ctx) {
       jobId, recorder: { id: user.id, role: user.role }, amountText: text("amount"), type,
       method: text("method"), reference: text("reference"), notes: text("notes"), photo,
     });
+    triggerQboSync();
     return Response.json({ id: r.payment.id, stageChanged: r.stageChanged, summary: r.summary }, { status: 201 });
   } catch (e) {
     if (e instanceof PaymentError) return paymentErrorResponse(e);

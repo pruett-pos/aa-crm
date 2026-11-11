@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/index.ts";
 import { getPaymentStore } from "@/lib/payments/index.ts";
 import { voidPayment } from "@/lib/payments/logic.ts";
 import { paymentErrorResponse } from "@/lib/payments/http.ts";
+import { triggerQboSync } from "@/lib/quickbooks/index.ts";
 
 type Ctx = { params: Promise<{ id: string }> };
 const Body = z.object({ reason: z.string().max(300) });
@@ -16,6 +17,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { id } = await params;
   try {
     const r = await voidPayment(getPaymentStore(), { paymentId: id, userId: check.user.id, reason: parsed.data.reason });
+    triggerQboSync();
     return Response.json({ voided: true, depositNoLongerCovered: r.depositNoLongerCovered });
   } catch (e) {
     return paymentErrorResponse(e);

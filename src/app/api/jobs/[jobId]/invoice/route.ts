@@ -5,6 +5,7 @@ import { sendInvoiceEmail } from "@/integrations/resend/index.ts";
 import { getCloseoutStore } from "@/lib/closeout/index.ts";
 import { issueInvoice, sendInvoice, voidInvoice } from "@/lib/closeout/logic.ts";
 import { closeoutErrorResponse } from "@/lib/closeout/http.ts";
+import { triggerQboSync } from "@/lib/quickbooks/index.ts";
 
 type Ctx = { params: Promise<{ jobId: string }> };
 const Body = z.discriminatedUnion("action", [
@@ -27,10 +28,12 @@ export async function POST(req: Request, { params }: Ctx) {
     const b = parsed.data;
     if (b.action === "issue") {
       const r = await issueInvoice(store, actor, jobId);
+      triggerQboSync();   // background: sends the invoice to QuickBooks; never delays or breaks this request
       return Response.json({ invoiceNumber: r.invoice.invoiceNumber, stage: r.stage }, { status: 201 });
     }
     if (b.action === "send") return Response.json(await sendInvoice(store, actor, jobId, { to: b.to }, sendInvoiceEmail));
     await voidInvoice(store, actor, jobId, b.reason);
+    triggerQboSync();
     return Response.json({ ok: true });
   } catch (e) {
     return closeoutErrorResponse(e);

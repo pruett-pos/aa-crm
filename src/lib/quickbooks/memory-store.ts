@@ -1,5 +1,5 @@
 import type {
-  CrmInvoice, CrmPayment, InvoicePayload, Link, LinkType, NewSyncJob, QboSettings, QboStore, SyncJob, SyncKind, SyncPatch, SyncStatus,
+  DuplicateFlag, CrmInvoice, CrmPayment, InvoicePayload, Link, LinkType, NewSyncJob, QboSettings, QboStore, SyncJob, SyncKind, SyncPatch, SyncStatus,
 } from "./types.ts";
 
 /** In-memory store for tests: the queue plus fixture CRM records. Not used by the app. */
@@ -14,6 +14,7 @@ export class MemoryQboStore implements QboStore {
   invoices: CrmInvoice[] = [];
   invoiceLineRows = new Map<string, InvoicePayload["lines"]>();
   payments: CrmPayment[] = [];
+  flags: DuplicateFlag[] = [];
   private seq = 0;
 
   async enqueue(j: NewSyncJob, now: Date): Promise<SyncJob> {
@@ -57,6 +58,12 @@ export class MemoryQboStore implements QboStore {
   async paymentIdsLinkedToInvoice(invoiceQboId: string) {
     return [...this.links].filter(([k, l]) => k.startsWith("payment:") && l.parentQboId === invoiceQboId).map(([k]) => k.slice("payment:".length));
   }
+  async addDuplicateFlag(f: Omit<DuplicateFlag, "status" | "createdAt">, now: Date) {
+    if (!this.flags.some((x) => x.customerId === f.customerId)) this.flags.push({ ...f, status: "open", createdAt: now });
+  }
+  async listDuplicateFlags(status: DuplicateFlag["status"]) { return this.flags.filter((f) => f.status === status).map((f) => ({ ...f })); }
+  async getDuplicateFlag(id: string) { const f = this.flags.find((x) => x.customerId === id); return f ? { ...f } : null; }
+  async resolveDuplicateFlag(id: string, status: "linked" | "dismissed") { const f = this.flags.find((x) => x.customerId === id); if (f) f.status = status; }
   async getRef(kind: string, key: string) { return this.refs.get(`${kind}:${key}`) ?? null; }
   async setRef(kind: string, key: string, id: string) { this.refs.set(`${kind}:${key}`, id); }
   async getClassMap() { return { ...this.classMap }; }
@@ -66,7 +73,7 @@ export class MemoryQboStore implements QboStore {
   async getSettings() { return { ...this.settings }; }
   async saveConnection(s: { realmId: string; companyName: string; environment: string }, now: Date) {
     const changed = this.settings.realmId !== null && (this.settings.realmId !== s.realmId || this.settings.environment !== s.environment);
-    if (changed) { this.links.clear(); this.refs.clear(); this.jobs = []; }
+    if (changed) { this.links.clear(); this.refs.clear(); this.jobs = []; this.flags = []; }
     this.settings = { ...s, connectedAt: now, syncFrom: this.settings.realmId === null || changed || !this.settings.syncFrom ? now : this.settings.syncFrom };
     return { companyChanged: changed };
   }

@@ -6,7 +6,7 @@ import { exchangeQboCode, qboApiBase, qboAuthorizeUrl, qboConfigFromEnv, qboStat
 import { MemoryQboStore } from "../src/lib/quickbooks/memory-store.ts";
 import { MemoryQboTokenStore } from "../src/lib/quickbooks/memory-token-store.ts";
 import { createQboTokenProvider } from "../src/lib/quickbooks/tokens.ts";
-import { MAX_ATTEMPTS, acknowledgeMismatch, backoffMs, enqueueInvoice, retryJob, runQueue, sweep } from "../src/lib/quickbooks/logic.ts";
+import { MAX_ATTEMPTS, acknowledgeMismatch, backoffMs, dismissDuplicateFlag, enqueueInvoice, linkToExistingCustomer, matchQboCustomer, retryJob, runQueue, sweep } from "../src/lib/quickbooks/logic.ts";
 import type { CrmCustomer, CrmInvoice, CrmPayment } from "../src/lib/quickbooks/types.ts";
 
 // ---------- OAuth ----------
@@ -156,17 +156,20 @@ class FakeQbo implements QboClient {
   private maybeFail() { const e = this.failNext.shift(); if (e) throw e; }
 
   async companyName() { return "A&A Quality Roofing"; }
-  async findCustomers(q: { email?: string | null; phone?: string | null; displayName?: string | null }) {
+  async findCustomers(q: { email?: string | null; displayName?: string | null }) {
     this.calls.push("findCustomers");
-    return this.customers.filter((c) => (q.email && c.email === q.email) || (q.phone && c.phone === q.phone) || (q.displayName && c.displayName === q.displayName));
+    return this.customers.filter((c) => (q.email && c.email?.toLowerCase() === q.email.toLowerCase()) || (q.displayName && c.displayName.toLowerCase() === q.displayName.toLowerCase()));
   }
   async createCustomer(c: NewQboCustomer) {
     this.calls.push("createCustomer"); this.maybeFail();
     if (this.duplicateNameOnce) { this.duplicateNameOnce = false; throw new QboError("duplicate", "Duplicate Name Exists Error"); }
     const dup = this.customers.find((x) => x.requestId === c.requestId);
     if (dup) return { id: dup.id };
+    // QuickBooks display names are unique.
+    if (this.customers.some((x) => x.displayName.toLowerCase() === c.displayName.toLowerCase())) throw new QboError("duplicate", "Duplicate Name Exists Error");
     const id = this.id();
-    this.customers.push({ id, displayName: c.displayName, email: c.email, phone: c.phone, requestId: c.requestId });
+    this.customers.push({ id, displayName: c.displayName, givenName: c.givenName, familyName: c.familyName, email: c.email, phone: c.phone,
+      address: c.address ? { line1: c.address.line1, postalCode: c.address.postalCode } : null, requestId: c.requestId });
     return { id };
   }
   async findClassByName(n: string) { return this.classes.get(n) ?? null; }
@@ -202,6 +205,8 @@ class FakeQbo implements QboClient {
   async voidPayment(id: string) { this.calls.push("voidPayment"); this.maybeFail(); const p = this.payments.find((x) => x.id === id); if (p) p.voided = true; }
 }
 
+const qc = (over: Partial<QboCustomer> & { id: string }): QboCustomer =>
+  ({ displayName: "Dana Miller", givenName: "Dana", familyName: "Miller", email: null, phone: null, address: null, ...over });
 const CUST: CrmCustomer = { id: "00000000-0000-4000-8000-000000000c01", firstName: "Dana", lastName: "Miller", email: "dana@example.com", phone: "(417) 555-0123" };
 const PROP = { street: "100 Example Rd", city: "West Plains", state: "MO", zip: "65775" };
 const INV_ID = "00000000-0000-4000-8000-0000000000a1";
@@ -232,34 +237,117 @@ function addInvoice(store: MemoryQboStore, over: Partial<CrmInvoice> = {}, lines
 }
 
 // ---------- customer match vs create ----------
-test("customer: matches an existing QuickBooks customer by email before creating, and stores the QBO id", async () => {
-  const { store, client, deps } = await setup();
-  client.customers.push({ id: "55", displayName: "Dana M.", email: "dana@example.com", phone: null });
-  addInvoice(store);
-  await enqueueInvoice(store, INV_ID, T0);
-  const t = await runQueue(deps);
-  assert.equal(t.done, 1);
-  assert.ok(!client.calls.includes("createCustomer"));
-  assert.equal(client.invoices[0].customerId, "55");
-  assert.equal((await store.getLink("customer", CUST.id))?.qboId, "55");
+// Same person = the NAME matches AND (the email OR the street + zip matches). Name alone is never enough.
+async function runInvoice(over: Awaited<ReturnType<typeof setup>>) {
+  addInvoice(over.store);
+  await enqueueInvoice(over.store, INV_ID, T0);
+  return runQueue(over.deps);
+}
+
+test("customer: name + email match reuses the QuickBooks customer (case and spacing ignored) and stores its id", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "55", displayName: "  DANA   miller ", email: "Dana@Example.com" }));
+  assert.equal((await runInvoice(x)).done, 1);
+  assert.ok(!x.client.calls.includes("createCustomer"));
+  assert.equal(x.client.invoices[0].customerId, "55");
+  assert.equal((await x.store.getLink("customer", CUST.id))?.qboId, "55");
+  assert.equal((await x.store.listDuplicateFlags("open")).length, 0);
 });
 
-test("customer: matches by phone, then by name; creates only when nothing matches", async () => {
-  const a = await setup();
-  a.client.customers.push({ id: "56", displayName: "D Miller", email: null, phone: "417-555-0123" });
-  addInvoice(a.store); await enqueueInvoice(a.store, INV_ID, T0); await runQueue(a.deps);
-  assert.equal(a.client.invoices[0].customerId, "56");
+test("customer: name + address match (street and zip, punctuation and case ignored) reuses it even with a different email or none", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "56", email: "someone.else@example.com", address: { line1: "100 EXAMPLE rd.", postalCode: "65775-1234" } }));
+  assert.equal((await runInvoice(x)).done, 1);
+  assert.equal(x.client.invoices[0].customerId, "56");
+  assert.ok(!x.client.calls.includes("createCustomer"));
+  assert.equal((await x.store.listDuplicateFlags("open")).length, 0);
+});
 
-  const b = await setup();
-  b.client.customers.push({ id: "57", displayName: "Dana Miller", email: null, phone: null });
-  addInvoice(b.store); await enqueueInvoice(b.store, INV_ID, T0); await runQueue(b.deps);
-  assert.equal(b.client.invoices[0].customerId, "57");
+test("customer: name + email OR address together may also match a different spelling of the name (given + family)", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "58", displayName: "Miller Roofing Co", email: "dana@example.com" }));   // display name differs: given + family still match
+  assert.equal((await runInvoice(x)).done, 1);
+  assert.equal(x.client.invoices[0].customerId, "58");
+});
 
-  const c = await setup();
-  addInvoice(c.store); await enqueueInvoice(c.store, INV_ID, T0); await runQueue(c.deps);
-  assert.equal(c.client.calls.filter((x) => x === "createCustomer").length, 1);
-  assert.equal(c.client.customers[0].displayName, "Dana Miller");
-  assert.equal(c.client.customers[0].phone, "417-555-0123");
+test("customer: email alone is NOT a match when the name differs, and a street without the same zip is not an address match", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "59", displayName: "Pat Jones", givenName: "Pat", familyName: "Jones", email: "dana@example.com" }));
+  x.client.customers.push(qc({ id: "60", address: { line1: "100 Example Rd", postalCode: "65801" } }));          // right name and street, wrong zip
+  await runInvoice(x);
+  assert.equal(x.client.calls.filter((c) => c === "createCustomer").length, 2);                      // the first create hits the duplicate name, the retry succeeds
+  assert.notEqual(x.client.invoices[0].customerId, "59");
+  assert.notEqual(x.client.invoices[0].customerId, "60");
+});
+
+test("customer: name only -> a NEW QuickBooks customer is created and flagged as a possible duplicate", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "57", email: "other@example.com", address: { line1: "9 Elm St", postalCode: "65775" } }));
+  const t = await runInvoice(x);
+  assert.equal(t.done, 1);
+  const created = x.client.customers.find((c) => c.id !== "57")!;
+  assert.equal(created.displayName, "Dana Miller (00000000)");                       // QuickBooks names are unique, so ours is made distinct
+  assert.equal(created.email, "dana@example.com");
+  assert.deepEqual(created.address, { line1: "100 Example Rd", postalCode: "65775" });   // saved so the next match can use it
+  assert.equal(x.client.invoices[0].customerId, created.id);                        // never silently attached to the existing one
+  const flags = await x.store.listDuplicateFlags("open");
+  assert.equal(flags.length, 1);
+  assert.deepEqual([flags[0].customerId, flags[0].customerName, flags[0].createdQboId], [CUST.id, "Dana Miller", created.id]);
+  assert.deepEqual(flags[0].candidates, [{ id: "57", displayName: "Dana Miller", email: "other@example.com" }]);
+});
+
+test("customer: nothing matches -> created without a flag, with phone formatted", async () => {
+  const x = await setup();
+  await runInvoice(x);
+  assert.equal(x.client.calls.filter((c) => c === "createCustomer").length, 1);
+  assert.equal(x.client.customers[0].displayName, "Dana Miller");
+  assert.equal(x.client.customers[0].phone, "417-555-0123");
+  assert.equal((await x.store.listDuplicateFlags("open")).length, 0);
+});
+
+test("customer: linking a flagged customer to the existing QuickBooks one sends future pushes there and closes the flag", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "57", email: "other@example.com" }));
+  await runInvoice(x);
+  const created = x.client.customers.find((c) => c.id !== "57")!;
+  assert.equal((await x.store.getLink("customer", CUST.id))?.qboId, created.id);
+
+  assert.equal(await linkToExistingCustomer(x.store, CUST.id, "999"), false);        // not one of the candidates QuickBooks showed
+  assert.equal(await linkToExistingCustomer(x.store, "00000000-0000-4000-8000-0000000000ff", "57"), false);
+  assert.equal(await linkToExistingCustomer(x.store, CUST.id, "57"), true);
+  assert.equal((await x.store.getLink("customer", CUST.id))?.qboId, "57");
+  assert.equal((await x.store.listDuplicateFlags("open")).length, 0);
+  assert.equal((await x.store.getDuplicateFlag(CUST.id))?.status, "linked");
+  assert.equal(await linkToExistingCustomer(x.store, CUST.id, "57"), false);         // already resolved
+
+  // the next invoice for this customer goes to the linked QuickBooks customer
+  const INV2 = "00000000-0000-4000-8000-0000000000a3";
+  addInvoice(x.store, { id: INV2, invoiceNumber: 1003, jobId: "00000000-0000-4000-8000-0000000000b2" });
+  await enqueueInvoice(x.store, INV2, T0);
+  await runQueue(x.deps);
+  assert.equal(x.client.invoices.find((i) => i.docNumber === "1003")?.customerId, "57");
+});
+
+test("customer: dismissing a flag keeps the new customer and closes the flag", async () => {
+  const x = await setup();
+  x.client.customers.push(qc({ id: "57", email: "other@example.com" }));
+  await runInvoice(x);
+  const created = (await x.store.getLink("customer", CUST.id))!.qboId;
+  assert.equal(await dismissDuplicateFlag(x.store, CUST.id), true);
+  assert.equal((await x.store.getLink("customer", CUST.id))?.qboId, created);
+  assert.equal((await x.store.listDuplicateFlags("open")).length, 0);
+  assert.equal(await dismissDuplicateFlag(x.store, CUST.id), false);
+});
+
+test("matchQboCustomer: pure rules", () => {
+  const addr = { street: "100 Example Rd", city: "West Plains", state: "MO", zip: "65775" };
+  const noEmail = { ...CUST, email: null };
+  assert.equal(matchQboCustomer(noEmail, addr, [qc({ id: "1" })]).match, null);                                   // name only
+  assert.equal(matchQboCustomer(noEmail, addr, [qc({ id: "1" })]).possible.length, 1);
+  assert.equal(matchQboCustomer(noEmail, null, [qc({ id: "1", address: { line1: "100 Example Rd", postalCode: "65775" } })]).match, null);   // no CRM address to compare
+  assert.equal(matchQboCustomer(CUST, addr, [qc({ id: "1", email: "DANA@example.com" })]).match?.id, "1");
+  assert.equal(matchQboCustomer(CUST, addr, [qc({ id: "1", displayName: "Someone Else", givenName: "Someone", familyName: "Else", email: "dana@example.com" })]).match, null);
+  assert.equal(matchQboCustomer(CUST, addr, [qc({ id: "1", address: { line1: "100  Example Rd.", postalCode: "65775" } }), qc({ id: "2", email: "dana@example.com" })]).match?.id, "2");   // email beats address
 });
 
 test("customer: a name already taken by someone else gets a distinct name instead of failing", async () => {
@@ -350,7 +438,7 @@ test("idempotency: a lost reply is safe. The retry reuses the same RequestId, an
   // The reply was lost after QuickBooks created it: no link saved. The next run finds it by number instead of creating another.
   const s2 = await setup();
   addInvoice(s2.store);
-  s2.client.customers.push({ id: "55", displayName: "x", email: "dana@example.com", phone: null });
+  s2.client.customers.push(qc({ id: "55", email: "dana@example.com" }));
   s2.client.invoices.push({ id: "900", customerId: "55", docNumber: "1001", voided: false, totalCents: 1_500_000, requestId: "old", lines: [], classId: "", dueDate: "" });
   await enqueueInvoice(s2.store, INV_ID, T0); await runQueue(s2.deps);
   assert.equal(s2.client.invoices.length, 1);

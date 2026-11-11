@@ -1,6 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client.ts";
 import type {
-  CrmCustomer, CrmInvoice, CrmPayment, InvoicePayload, Link, LinkType, NewSyncJob, QboSettings, QboStore, SyncJob, SyncKind, SyncPatch, SyncStatus,
+  DuplicateCandidate, DuplicateFlag, CrmCustomer, CrmInvoice, CrmPayment, InvoicePayload, Link, LinkType, NewSyncJob, QboSettings, QboStore, SyncJob, SyncKind, SyncPatch, SyncStatus,
 } from "./types.ts";
 
 // Raw SQL on purpose: these tables are new (db/migrations/015_quickbooks.sql) and are read and written only here.
@@ -14,6 +14,12 @@ const toJob = (r: JobRow): SyncJob => ({
   id: r.id, kind: r.kind as SyncKind, entityId: r.entity_id, status: r.status as SyncStatus, attempts: r.attempts, nextAttemptAt: r.next_attempt_at,
   lockedAt: r.locked_at, lastError: r.last_error, qboId: r.qbo_id, requestId: r.request_id, payload: (r.payload as InvoicePayload | null) ?? null,
   crmTotalCents: num(r.crm_total_cents), qboTotalCents: num(r.qbo_total_cents), mismatch: r.mismatch, createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+type FlagRow = { customer_id: string; customer_name: string; created_qbo_id: string; candidates: unknown; status: string; created_at: Date };
+const toFlag = (r: FlagRow): DuplicateFlag => ({
+  customerId: r.customer_id, customerName: r.customer_name, createdQboId: r.created_qbo_id, candidates: (r.candidates as DuplicateCandidate[]) ?? [],
+  status: r.status === "linked" ? "linked" : r.status === "dismissed" ? "dismissed" : "open", createdAt: r.created_at,
 });
 
 type InvRow = {
@@ -118,6 +124,23 @@ export function createPrismaQboStore(db: PrismaClient): QboStore {
       const r = await db.$queryRaw<{ entity_id: string }[]>`SELECT entity_id FROM qbo_links WHERE entity_type = 'payment' AND parent_qbo_id = ${invoiceQboId}`;
       return r.map((x) => x.entity_id);
     },
+    async addDuplicateFlag(f, now) {
+      await db.$executeRaw`
+        INSERT INTO qbo_customer_flags (customer_id, customer_name, created_qbo_id, candidates, created_at)
+        VALUES (${f.customerId}::uuid, ${f.customerName}, ${f.createdQboId}, ${JSON.stringify(f.candidates)}::jsonb, ${now})
+        ON CONFLICT (customer_id) DO NOTHING`;
+    },
+    async listDuplicateFlags(status) {
+      const r = await db.$queryRaw<FlagRow[]>`SELECT * FROM qbo_customer_flags WHERE status = ${status} ORDER BY created_at DESC LIMIT 200`;
+      return r.map(toFlag);
+    },
+    async getDuplicateFlag(id) {
+      const r = await db.$queryRaw<FlagRow[]>`SELECT * FROM qbo_customer_flags WHERE customer_id = ${id}::uuid`;
+      return r[0] ? toFlag(r[0]) : null;
+    },
+    async resolveDuplicateFlag(id, status, now) {
+      await db.$executeRaw`UPDATE qbo_customer_flags SET status = ${status}, resolved_at = ${now} WHERE customer_id = ${id}::uuid`;
+    },
     async getRef(kind, key) {
       const r = await db.$queryRaw<{ qbo_id: string }[]>`SELECT qbo_id FROM qbo_refs WHERE kind = ${kind} AND key = ${key}`;
       return r[0]?.qbo_id ?? null;
@@ -161,6 +184,7 @@ export function createPrismaQboStore(db: PrismaClient): QboStore {
           await tx.$executeRaw`DELETE FROM qbo_links`;
           await tx.$executeRaw`DELETE FROM qbo_refs`;
           await tx.$executeRaw`DELETE FROM qbo_sync_jobs`;
+          await tx.$executeRaw`DELETE FROM qbo_customer_flags`;
         }
         const syncFrom = m.realm_id === undefined || changed || !m.sync_from ? now.toISOString() : m.sync_from;
         const put = (k: string, v: string) => tx.$executeRaw`INSERT INTO qbo_settings (key, value, updated_at) VALUES (${k}, ${v}, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`;

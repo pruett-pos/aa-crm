@@ -24,8 +24,8 @@ Railway, the CRM service, **Variables**:
 
 For local work use `http://localhost:3000/api/quickbooks/callback` in `.env`. Keys are never logged or committed.
 
-Run the migration on the database once (dev now; production through the migration runner):
-`psql $DATABASE_URL -f db/migrations/015_quickbooks.sql`
+Run the migrations on the database once (dev now; production through the migration runner):
+`psql $DATABASE_URL -f db/migrations/015_quickbooks.sql` then `psql $DATABASE_URL -f db/migrations/016_quickbooks_duplicates.sql`
 
 ### 2. Connect
 
@@ -40,7 +40,7 @@ These are settings inside QuickBooks that the CRM cannot change:
 
 - **Turn on custom transaction numbers** (Settings, Account and settings, Sales, "Custom transaction numbers"). The CRM sends its invoice number (1001...) as the QuickBooks invoice number. Without this, QuickBooks numbers the invoice itself and the numbers won't match.
 - **Turn on class tracking** (Settings, Account and settings, Advanced, Categories, "Track classes"). Each invoice is tagged with its lead source as a class.
-- **Sales tax**: the CRM prices have no tax. If QuickBooks adds tax or a discount to the invoice, the total won't match; the sync screen flags it as a **total mismatch**. Turn off automatic sales tax for these invoices, or tell me how tax should work.
+- **Sales tax (confirmed by AL: none on these invoices).** The CRM prices have no tax and the CRM never sends any. Keep automatic sales tax off for these invoices in QuickBooks. If QuickBooks adds tax or a discount anyway, the total won't match and the sync screen flags it as a **total mismatch**.
 - QuickBooks needs at least one **Income** account (every company has one). New service items are attached to an account named "Services" if it exists, otherwise the first income account.
 
 ### 4. Map lead sources and divisions (optional)
@@ -73,12 +73,22 @@ Pushing also starts in the background the moment an invoice is issued, a payment
 
 | CRM event | QuickBooks |
 |---|---|
-| Invoice issued | The customer (matched by email, then phone, then name, otherwise created; the QuickBooks id is stored), then an **Invoice**: invoice number, issue date, due date, one line per trade (item for that division, the chosen package as the description), bill-to address = the property, **class = lead source**. |
+| Invoice issued | The customer (matched to an existing QuickBooks customer by the rules below, otherwise created; the QuickBooks id is stored), then an **Invoice**: invoice number, issue date, due date, one line per trade (item for that division, the chosen package as the description), bill-to address = the property, **class = lead source**. |
 | Payment recorded | A **Payment** applied to the job's live invoice, with payment method (Check, Credit Card, ACH, Cash, Insurance check, Financing; created if missing) and the reference. A payment recorded before the invoice exists waits for it. |
 | Payment voided | The QuickBooks payment is voided. If it was never sent, its pending push is cancelled. |
 | Invoice voided | Payments applied to it are voided in QuickBooks first (QuickBooks refuses otherwise), then the invoice is voided. Those payments are still good in the CRM, so they are sent again to the replacement invoice. |
 
-Matching the customer is best effort: QuickBooks only searches exact email, phone and display name, so a customer typed into QuickBooks as "Dana M." with no email or phone is not recognised and a new one is created. If a *different* person already has the same display name, the new customer is named "First Last (abcd1234)".
+### How a QuickBooks customer is matched (confirmed by AL)
+
+A QuickBooks customer is the same person **only when the name matches AND either the email OR the address matches**.
+
+- **Name**: the QuickBooks display name, or its first + last name, equals the CRM customer's first + last name.
+- **Email**: the same email address.
+- **Address**: the same street and the same ZIP (first 5 digits) as the job's property, against the customer's billing address in QuickBooks.
+- Upper and lower case, extra spaces and punctuation never matter ("100 EXAMPLE rd." equals "100 Example Rd"). Phone number is **not** used for matching.
+- When a match is found, its QuickBooks id is stored and used from then on.
+- **Name only is not enough.** A new QuickBooks customer is created instead (QuickBooks display names must be unique, so it is named "First Last (abcd1234)") and listed on the sync screen under **Possible duplicate customers**, showing who already has that name. An admin can press **Link to existing QuickBooks customer** to use the existing one from now on, or **Different person, keep separate** to close the flag. Invoices and payments already sent stay on the new QuickBooks customer; merge the two in QuickBooks if you want them together.
+- New QuickBooks customers are created with the job's address, so later matches by address can work.
 
 ### Safety rules
 
@@ -93,7 +103,7 @@ Pulling anything from QuickBooks, change orders and partial invoices (the CRM do
 
 ## Testing status
 
-Tested against a **fake QuickBooks** built from Intuit's published API (tests/quickbooks.test.ts), not against the real sandbox. Before relying on it, connect the sandbox, issue one test invoice and record one test payment, and check the sync screen shows them as sent and the totals match. Intuit's query syntax for phone matching (`PrimaryPhone = '417-555-0123'`) is the least certain part; if it errors, name matching still works.
+Tested against a **fake QuickBooks** built from Intuit's published API (tests/quickbooks.test.ts), not against the real sandbox. Before relying on it, connect the sandbox, issue one test invoice and record one test payment, and check the sync screen shows them as sent and the totals match. Customer matching depends on QuickBooks returning each candidate's email and billing address; check that on the sandbox too.
 
 ---
 

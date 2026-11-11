@@ -5,9 +5,13 @@ import { QboError } from "./errors.ts";
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-export type QboCustomer = { id: string; displayName: string; email: string | null; phone: string | null };
+export type QboCustomer = {
+  id: string; displayName: string; givenName: string | null; familyName: string | null; email: string | null; phone: string | null;
+  /** Billing address (falls back to the shipping address): street line and postal code, as QuickBooks has them. */
+  address: { line1: string; postalCode: string } | null;
+};
 export type QboAddress = { line1: string; city: string; state: string; postalCode: string };
-export type NewQboCustomer = { requestId: string; displayName: string; givenName: string; familyName: string; email: string | null; phone: string | null };
+export type NewQboCustomer = { requestId: string; displayName: string; givenName: string; familyName: string; email: string | null; phone: string | null; address: QboAddress | null };
 export type QboInvoiceLine = { itemId: string; description: string; amountCents: number };
 export type NewQboInvoice = {
   requestId: string; customerId: string; classId: string; docNumber: string; txnDate: string; dueDate: string;
@@ -21,7 +25,8 @@ export type NewQboPayment = {
 
 export interface QboClient {
   companyName(): Promise<string>;
-  findCustomers(q: { email?: string | null; phone?: string | null; displayName?: string | null }): Promise<QboCustomer[]>;
+  /** Candidates by email and by display name. The CRM decides which of them is the same person. */
+  findCustomers(q: { email?: string | null; displayName?: string | null }): Promise<QboCustomer[]>;
   createCustomer(c: NewQboCustomer): Promise<{ id: string }>;
   findClassByName(name: string): Promise<string | null>;
   createClass(name: string, requestId: string): Promise<string>;
@@ -106,7 +111,9 @@ export function createQboClient(o: QboClientOptions): QboClient {
     call("POST", entity, { ...(requestId ? { requestid: requestId } : {}), ...extra }, body);
 
   const toCustomer = (c: J): QboCustomer => ({
-    id: String(c.Id), displayName: String(c.DisplayName ?? ""), email: c.PrimaryEmailAddr?.Address ?? null, phone: c.PrimaryPhone?.FreeFormNumber ?? null,
+    id: String(c.Id), displayName: String(c.DisplayName ?? ""), givenName: c.GivenName ?? null, familyName: c.FamilyName ?? null,
+    email: c.PrimaryEmailAddr?.Address ?? null, phone: c.PrimaryPhone?.FreeFormNumber ?? null,
+    address: (() => { const a = c.BillAddr ?? c.ShipAddr; return a?.Line1 ? { line1: String(a.Line1), postalCode: String(a.PostalCode ?? "") } : null; })(),
   });
   const toInvoice = (i: J): QboInvoiceInfo => ({
     id: String(i.Id), customerId: String(i.CustomerRef?.value ?? ""), totalCents: dollarsToCents(i.TotalAmt ?? 0), docNumber: i.DocNumber ?? null,
@@ -123,7 +130,6 @@ export function createQboClient(o: QboClientOptions): QboClient {
       const found = new Map<string, QboCustomer>();
       const add = (rows: J[]) => rows.forEach((r) => found.set(String(r.Id), toCustomer(r)));
       if (q.email) add(await query(`select * from Customer where PrimaryEmailAddr = ${qboQuote(q.email)}`));
-      if (q.phone) add(await query(`select * from Customer where PrimaryPhone = ${qboQuote(q.phone)}`));
       if (q.displayName) add(await query(`select * from Customer where DisplayName = ${qboQuote(q.displayName)}`));
       return [...found.values()];
     },
@@ -132,6 +138,7 @@ export function createQboClient(o: QboClientOptions): QboClient {
       const body: J = { DisplayName: c.displayName, GivenName: c.givenName.slice(0, 25), FamilyName: c.familyName.slice(0, 25) };
       if (c.email) body.PrimaryEmailAddr = { Address: c.email };
       if (c.phone) body.PrimaryPhone = { FreeFormNumber: c.phone };
+      if (c.address) body.BillAddr = { Line1: c.address.line1, City: c.address.city, CountrySubDivisionCode: c.address.state, PostalCode: c.address.postalCode };
       const j = await post("customer", c.requestId, body);
       return { id: String(j.Customer.Id) };
     },

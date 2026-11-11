@@ -13,7 +13,8 @@ export default async function QuickBooksSyncPage() {
   if (user.role !== "admin" && user.role !== "accounting") redirect("/");
 
   const store = getQboStore();
-  const [counts, failed, mismatches, pending] = await Promise.all([
+  const [flags, counts, failed, mismatches, pending] = await Promise.all([
+    store.listDuplicateFlags("open"),
     store.counts(),
     store.listJobs({ statuses: ["failed"], limit: 100 }),
     store.listJobs({ statuses: ["done"], mismatchOnly: true, limit: 100 }),
@@ -29,6 +30,8 @@ export default async function QuickBooksSyncPage() {
       <SyncClient
         configured={getQboConfig() !== null}
         counts={{ queued: counts.pending + counts.waiting + counts.running, failed: counts.failed, done: counts.done, mismatch: counts.mismatch }}
+        canLink={user.role === "admin"}
+        duplicates={flags.map((f) => ({ customerId: f.customerId, name: f.customerName, candidates: f.candidates }))}
         failed={failed.map(view)} mismatches={mismatches.map(view)} pending={pending.map(view)}
       />
     </>

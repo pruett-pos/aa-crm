@@ -5,7 +5,8 @@ import { QboError, isRetryable } from "../../integrations/quickbooks/errors.ts";
 import type { QboClient } from "../../integrations/quickbooks/client.ts";
 import { en } from "../../i18n/en.ts";
 import { localDate } from "../commission/periods.ts";
-import type { CrmCustomer, CrmInvoice, CrmPayment, QboStore, SyncJob } from "./types.ts";
+import type { QboCustomer } from "../../integrations/quickbooks/client.ts";
+import type { CrmAddress, CrmCustomer, CrmInvoice, CrmPayment, QboStore, SyncJob } from "./types.ts";
 
 export const MAX_ATTEMPTS = 8;
 const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 4 * 60 * 60_000, 12 * 60 * 60_000];
@@ -67,35 +68,75 @@ type Outcome = { type: "done"; qboId: string | null; qboTotalCents?: number; crm
   | { type: "wait"; reason: string }
   | { type: "cancel"; reason: string };
 
-async function ensureCustomer(d: Deps, c: CrmCustomer): Promise<string> {
+// Same-person rules. Case, spacing and punctuation never matter.
+const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+const zip5 = (s: string | null | undefined) => digits(s).slice(0, 5);
+const sameName = (q: QboCustomer, first: string, last: string) =>
+  norm(q.displayName) === norm(`${first} ${last}`) || (!!q.givenName && !!q.familyName && norm(`${q.givenName} ${q.familyName}`) === norm(`${first} ${last}`));
+const sameAddress = (q: QboCustomer, a: CrmAddress | null) =>
+  !!a && !!q.address && norm(q.address.line1) === norm(a.street) && !!zip5(a.zip) && zip5(q.address.postalCode) === zip5(a.zip);
+
+/**
+ * A QuickBooks customer is the same person only when the NAME matches AND the email OR the street + zip matches.
+ * Name alone is not enough: `possible` holds those, so the caller can flag them for an admin.
+ */
+export function matchQboCustomer(c: CrmCustomer, address: CrmAddress | null, found: QboCustomer[]): { match: QboCustomer | null; possible: QboCustomer[] } {
+  const named = found.filter((f) => sameName(f, c.firstName, c.lastName));
+  const email = c.email?.trim().toLowerCase();
+  const match = named.find((f) => !!email && f.email?.trim().toLowerCase() === email) ?? named.find((f) => sameAddress(f, address)) ?? null;
+  return { match, possible: match ? [] : named };
+}
+
+async function ensureCustomer(d: Deps, c: CrmCustomer, address: CrmAddress | null): Promise<string> {
   const linked = await d.store.getLink("customer", c.id);
   if (linked) return linked.qboId;
 
   const fullName = `${c.firstName} ${c.lastName}`.trim();
   const phone = fmtPhone(c.phone);
-  const found = await d.client.findCustomers({ email: c.email?.trim() || null, phone, displayName: fullName });
-  // Same email first, then same phone (10 digits), then same name. Never merge on a partial match.
-  const email = c.email?.trim().toLowerCase();
-  const match =
-    (email && found.find((f) => f.email?.toLowerCase() === email)) ||
-    (digits(phone) && found.find((f) => digits(f.phone) === digits(phone))) ||
-    found.find((f) => f.displayName.trim().toLowerCase() === fullName.toLowerCase());
+  const found = await d.client.findCustomers({ email: c.email?.trim() || null, displayName: fullName });
+  const { match, possible } = matchQboCustomer(c, address, found);
   if (match) {
     await d.store.setLink("customer", c.id, match.id);
     return match.id;
   }
   const make = (displayName: string, requestId: string) =>
-    d.client.createCustomer({ requestId, displayName, givenName: c.firstName, familyName: c.lastName, email: c.email?.trim() || null, phone });
+    d.client.createCustomer({
+      requestId, displayName, givenName: c.firstName, familyName: c.lastName, email: c.email?.trim() || null, phone,
+      address: address ? { line1: address.street, city: address.city, state: address.state, postalCode: address.zip } : null,
+    });
   let created: { id: string };
   try {
     created = await make(fullName, c.id);
   } catch (e) {
-    // The name is taken by someone who didn't match on email or phone (or by a vendor). Make ours distinct and stable.
+    // The name is taken (QuickBooks names must be unique) by someone who didn't match. Make ours distinct and stable.
     if (!(e instanceof QboError) || e.kind !== "duplicate") throw e;
     created = await make(`${fullName} (${c.id.slice(0, 8)})`, `${c.id}-n`.slice(0, 50));
   }
   await d.store.setLink("customer", c.id, created.id);
+  if (possible.length) {
+    await d.store.addDuplicateFlag({
+      customerId: c.id, customerName: fullName, createdQboId: created.id,
+      candidates: possible.slice(0, 5).map((q) => ({ id: q.id, displayName: q.displayName, email: q.email })),
+    }, nowOf(d));
+  }
   return created.id;
+}
+
+/** Admin chose an existing QuickBooks customer for a flagged one. Only the candidates QuickBooks showed can be chosen. */
+export async function linkToExistingCustomer(store: QboStore, customerId: string, qboId: string, now: Date = new Date()): Promise<boolean> {
+  const f = await store.getDuplicateFlag(customerId);
+  if (!f || f.status !== "open" || !f.candidates.some((c) => c.id === qboId)) return false;
+  await store.setLink("customer", customerId, qboId);
+  await store.resolveDuplicateFlag(customerId, "linked", now);
+  return true;
+}
+
+/** Admin says the flagged customer really is someone else: keep the new QuickBooks customer. */
+export async function dismissDuplicateFlag(store: QboStore, customerId: string, now: Date = new Date()): Promise<boolean> {
+  const f = await store.getDuplicateFlag(customerId);
+  if (!f || f.status !== "open") return false;
+  await store.resolveDuplicateFlag(customerId, "dismissed", now);
+  return true;
 }
 
 async function ensureClass(d: Deps, source: string): Promise<string> {
@@ -142,7 +183,7 @@ async function pushInvoice(d: Deps, job: SyncJob): Promise<Outcome> {
   const lines = job.payload?.lines ?? [];
   if (!lines.length) throw new QboError("validation", "The invoice has no trade lines to send");
 
-  const customerId = await ensureCustomer(d, inv.customer);
+  const customerId = await ensureCustomer(d, inv.customer, inv.property);
   const classId = await ensureClass(d, inv.source);
   const itemMap = await d.store.getItemMap();
   const qLines = [];
@@ -173,7 +214,7 @@ async function pushPayment(d: Deps, job: SyncJob): Promise<Outcome> {
   const invLink = await d.store.getLink("invoice", inv.id);
   if (!invLink) return { type: "wait", reason: `Waiting for invoice ${inv.invoiceNumber} to reach QuickBooks` };
 
-  const customerId = await ensureCustomer(d, p.customer);
+  const customerId = await ensureCustomer(d, p.customer, inv.property);
   const methodId = await ensurePaymentMethod(d, p.method);
   const made = await d.client.createPayment({
     requestId: job.requestId, customerId, invoiceId: invLink.qboId, amountCents: p.amountCents, txnDate: localDate(p.receivedAt),

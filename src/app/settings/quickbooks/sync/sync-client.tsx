@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { en } from "@/i18n/en.ts";
 
+export type DuplicateView = { customerId: string; name: string; candidates: { id: string; displayName: string; email: string | null }[] };
 export type JobRowView = { id: string; kind: string; attempts: number; error: string | null; updatedAt: string; crmCents: number | null; qboCents: number | null };
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Chicago", dateStyle: "medium", timeStyle: "short" });
 const usd = (c: number | null) => (c === null ? "-" : `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`);
@@ -11,7 +12,7 @@ const kind = (k: string) => (en.quickbooks.kinds as Record<string, string>)[k] ?
 
 export function SyncClient(p: {
   configured: boolean; counts: { queued: number; failed: number; done: number; mismatch: number };
-  failed: JobRowView[]; mismatches: JobRowView[]; pending: JobRowView[];
+  failed: JobRowView[]; mismatches: JobRowView[]; pending: JobRowView[]; duplicates: DuplicateView[]; canLink: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,13 @@ export function SyncClient(p: {
   async function act(id: string, action: "retry" | "review") {
     setBusy(true);
     await fetch(`/api/quickbooks/jobs/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }).catch(() => null);
+    setBusy(false);
+    router.refresh();
+  }
+
+  async function resolve(customerId: string, body: { action: "link"; qboId: string } | { action: "dismiss" }) {
+    setBusy(true);
+    await fetch(`/api/quickbooks/customers/${customerId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
     router.refresh();
   }
@@ -62,6 +70,23 @@ export function SyncClient(p: {
         </dl>
         <p><button type="button" disabled={busy || !p.configured} onClick={syncNow}>{en.quickbooks.syncNow}</button></p>
         {msg && <p role="status">{msg}</p>}
+      </div>
+      <div className="panel">
+        <h2>{en.quickbooks.dupTitle}</h2>
+        <p className="muted">{en.quickbooks.dupHelp}</p>
+        {p.duplicates.length === 0 ? <p className="muted">{en.quickbooks.noDup}</p> : p.duplicates.map((d) => (
+          <div key={d.customerId}>
+            <p><strong>{d.name}</strong>. {en.quickbooks.dupFound(d.candidates.map((c) => c.displayName + (c.email ? ` (${c.email})` : "")).join("; "))}</p>
+            {p.canLink && (
+              <p>
+                {d.candidates.map((c) => (
+                  <button key={c.id} type="button" disabled={busy} onClick={() => resolve(d.customerId, { action: "link", qboId: c.id })}>{en.quickbooks.linkTo(c.displayName)}</button>
+                ))}{" "}
+                <button type="button" disabled={busy} onClick={() => resolve(d.customerId, { action: "dismiss" })}>{en.quickbooks.keepSeparate}</button>
+              </p>
+            )}
+          </div>
+        ))}
       </div>
       <div className="panel"><h2>{en.quickbooks.failedTitle}</h2>{table(p.failed, en.quickbooks.noFailed, { label: en.quickbooks.retry, action: "retry" })}</div>
       <div className="panel"><h2>{en.quickbooks.mismatchTitle}</h2><p className="muted">{en.quickbooks.mismatchHelp}</p>{table(p.mismatches, en.quickbooks.noMismatch, { label: en.quickbooks.markReviewed, action: "review" }, true)}</div>

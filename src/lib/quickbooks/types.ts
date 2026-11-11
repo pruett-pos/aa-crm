@@ -74,6 +74,13 @@ export type QboSettings = {
   syncFrom: Date | null;
 };
 
+export type DuplicateCandidate = { id: string; displayName: string; email: string | null };
+/** A CRM customer that matched an existing QuickBooks customer on name only: created as new, waiting for an admin to decide. */
+export type DuplicateFlag = {
+  customerId: string; customerName: string; createdQboId: string; candidates: DuplicateCandidate[];
+  status: "open" | "linked" | "dismissed"; createdAt: Date;
+};
+
 /** The queue, the links, the mappings, and read access to the CRM records being pushed. */
 export interface QboStore {
   // --- outbox
@@ -92,6 +99,10 @@ export interface QboStore {
   setLink(t: LinkType, entityId: string, qboId: string, parentQboId?: string | null): Promise<void>;
   deleteLink(t: LinkType, entityId: string): Promise<void>;
   paymentIdsLinkedToInvoice(invoiceQboId: string): Promise<string[]>;
+  addDuplicateFlag(f: Omit<DuplicateFlag, "status" | "createdAt">, now: Date): Promise<void>;
+  listDuplicateFlags(status: DuplicateFlag["status"]): Promise<DuplicateFlag[]>;
+  getDuplicateFlag(customerId: string): Promise<DuplicateFlag | null>;
+  resolveDuplicateFlag(customerId: string, status: "linked" | "dismissed", now: Date): Promise<void>;
   getRef(kind: string, key: string): Promise<string | null>;
   setRef(kind: string, key: string, qboId: string): Promise<void>;
   getClassMap(): Promise<Record<string, string>>;

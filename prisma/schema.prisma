@@ -207,6 +207,7 @@ model Property {
   market     Market
   customer   Customer @relation(fields: [customerId], references: [id])
   jobs       Job[]
+  aerialEstimate PropertyAerialEstimate?
 
   @@map("properties")
 }
@@ -661,4 +662,49 @@ model AuditLog {
   details     Json?
 
   @@map("audit_log")
+}
+
+// Aerial roof estimate from Google's imagery, one per property. A first look only ("verify on site"): contracts and
+// material orders never read this table.
+model PropertyAerialEstimate {
+  propertyId     String    @id @map("property_id") @db.Uuid
+  status         String
+  attempts       Int       @default(0)
+  error          String?
+  lat            Float?
+  lng            Float?
+  rawAreaSqft    Int?      @map("raw_area_sqft")
+  correctionBps  Int?      @map("correction_bps")
+  roofAreaSqft   Int?      @map("roof_area_sqft")
+  squaresX10     Int?      @map("squares_x10")
+  mainPitch      String?   @map("main_pitch")
+  segmentCount   Int?      @map("segment_count")
+  segments       Json      @default("[]")
+  imageryQuality String?   @map("imagery_quality")
+  imageryDate    DateTime? @map("imagery_date") @db.Date
+  confidence     String?
+  raw            Json?
+  imageData      Bytes?    @map("image_data")
+  imageMime      String?   @map("image_mime")
+  fetchedAt      DateTime? @map("fetched_at") @db.Timestamptz()
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz()
+  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("property_aerial_estimates")
+}
+
+model AerialSettings {
+  id                  Int      @id @db.SmallInt
+  enabled             Boolean  @default(false)
+  wasteBps            Int      @default(1000) @map("waste_bps")
+  correctionBps       Int      @default(10000) @map("correction_bps")
+  eavesFt10PerSq      Int      @default(50) @map("eaves_ft10_per_sq")
+  rakesFt10PerSq      Int      @default(40) @map("rakes_ft10_per_sq")
+  ridgesHipsFt10PerSq Int      @default(25) @map("ridges_hips_ft10_per_sq")
+  valleysFt10PerSq    Int      @default(10) @map("valleys_ft10_per_sq")
+  updatedBy           String?  @map("updated_by") @db.Uuid
+  updatedAt           DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+
+  @@map("aerial_settings")
 }

@@ -1,5 +1,5 @@
 import {
-  SCOPE_MAX_TARGET_MARGIN_BPS, pruettPriceCents, priceForTargetMarginCents,
+  SCOPE_MAX_TARGET_MARGIN_BPS, materialUnitCostCents, priceForTargetMarginCents,
   scopeTotals, scopeCommissionRateBps, STAGES, type Division,
 } from "../rules.ts";
 import { can, type Role } from "../auth/roles.ts";
@@ -49,7 +49,7 @@ export function computeScope(input: ScopeInput, catalog: Product[], jobDivisions
       if (!p) throw new ScopeInputError(`Line ${i + 1}: pick a product from the catalog`);
       productId = p.id;
       description = p.name;
-      unitCostCents = pruettPriceCents(p.retailCents);
+      unitCostCents = materialUnitCostCents(p);
     } else if (it.kind === "labor" || it.kind === "misc") {
       description = (it.description ?? "").trim();
       if (!description) throw new ScopeInputError(`Line ${i + 1}: description is required`);

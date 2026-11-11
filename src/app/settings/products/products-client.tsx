@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { en } from "@/i18n/en.ts";
 
-type P = { id: string; sku: string; name: string; unit: string; retailCents: number; specialOrder: boolean; builderCents: number };
+type P = { id: string; sku: string; name: string; unit: string; retailCents: number; specialOrder: boolean; builderCents: number; source?: string; active?: boolean };
 type Form = { sku: string; name: string; unit: string; price: string; specialOrder: boolean };
 const money = (c: number) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const errText = (code?: string) => (en.catalog.errors as Record<string, string>)[code ?? ""] ?? en.catalog.errors.generic;
@@ -75,7 +75,11 @@ export function ProductsClient({ initial }: { initial: P[] }) {
                       </td>
                     ) : (
                       <>
-                        <td>{p.name}</td>
+                        <td>
+                          {p.name}
+                          {p.source === "pruett" && <span className="muted small-text"> · {en.catalog.fromPruett}</span>}
+                          {p.active === false && <span className="muted small-text"> · {en.catalog.inactive}</span>}
+                        </td>
                         <td className="muted small-text">{p.sku}</td>
                         <td>{p.unit}</td>
                         <td>{money(p.retailCents)}</td>

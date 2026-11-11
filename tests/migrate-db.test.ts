@@ -99,7 +99,7 @@ test("baseline: a database that predates the runner is marked without running SQ
     assert.equal((await c.query("SELECT to_regclass('audit_log') AS t")).rows[0].t, null, "baseline ran no migration SQL");
 
     const run = await runMigrations(c, all);
-    assert.deepEqual(run.applied, ["015_audit_log", "016_rate_limits"]);
+    assert.deepEqual(run.applied, ["015_audit_log", "016_rate_limits", "017_pruett_sync"]);
     assert.equal((await c.query("SELECT count(*)::int AS n FROM users")).rows[0].n, 1, "data untouched");
   });
 });

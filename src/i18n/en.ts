@@ -659,7 +659,9 @@ export const en = {
   catalog: {
     title: "Product catalog",
     back: "Back",
-    help: "The materials your scopes can use. Enter the Pruett retail price; the CRM works out what you pay at the Builder plan. When the Pruett price sync is added, it will keep these prices current by SKU, so use the real Pruett SKU where you have one.",
+    help: "The materials your scopes can use. Prices for products that come from Pruett POS are updated every night by SKU, so edits to them are overwritten. Add a product by hand only for something Pruett doesn't list: enter the retail price and the CRM works out what you pay at the Builder plan.",
+    fromPruett: "From Pruett",
+    inactive: "Not in Pruett feed",
     add: "Add a product",
     sku: "Pruett SKU (or your own code)",
     name: "Name",
@@ -686,6 +688,26 @@ export const en = {
       invalid_body: "That value isn't allowed.",
       rate_limited: "Too many attempts. Wait a few minutes.",
       generic: "Could not save. Try again.",
+    },
+  },
+  priceSync: {
+    title: "Pruett price sync",
+    help: "Prices come from Pruett POS every night at 2 AM Central. A product Pruett stops listing is marked inactive and can't be picked for new scope lines; scopes that already use it keep it.",
+    never: "No sync has run yet.",
+    button: "Sync from Pruett now",
+    running: "Syncing…",
+    last: "Last sync",
+    status: { running: "Running", ok: "Succeeded", warning: "Finished with a warning", error: "Failed" },
+    trigger: { cron: "Nightly", manual: "By hand" },
+    counts: (seen: number, added: number, changed: number, deactivated: number) =>
+      `${seen} seen, ${added} new, ${changed} changed, ${deactivated} deactivated`,
+    warning: "Warning",
+    error: "Error",
+    done: "Sync finished. Reload the page to see the updated products.",
+    errors: {
+      sync_running: "A sync is already running. Try again in a minute.",
+      rate_limited: "Too many attempts. Wait a few minutes.",
+      generic: "Could not start the sync. Try again.",
     },
   },
   measurements: {

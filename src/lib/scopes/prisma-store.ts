@@ -68,6 +68,7 @@ export function createPrismaScopeStore(db: PrismaClient): ScopeStore {
       return rows.map((p): Product => ({
         id: p.id, sku: p.pruettSku, name: p.name, unit: p.unit,
         retailCents: Number(p.retailCents), specialOrder: p.specialOrder,
+        costCents: p.costCents === null ? null : Number(p.costCents), active: p.active, source: p.source === "pruett" ? "pruett" : "manual",
       }));
     },
     async listScopes(jobId) {

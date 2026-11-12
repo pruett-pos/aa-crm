@@ -10,6 +10,8 @@ import { en } from "@/i18n/en.ts";
 import { ScopeBuilder } from "./scope-builder.tsx";
 import { ContractPanel } from "./contract-panel.tsx";
 import { MeasurementsPanel } from "./measurements-panel.tsx";
+import { AerialPanel } from "../aerial-panel.tsx";
+import { getAerialStore } from "@/lib/aerial/index.ts";
 
 export default async function ScopePage({ params }: { params: Promise<{ jobId: string }> }) {
   const user = await getCurrentUser();
@@ -21,11 +23,13 @@ export default async function ScopePage({ params }: { params: Promise<{ jobId: s
   if (data.status === "not_found") notFound();
   if (data.status === "forbidden") redirect("/jobs");
   const contract = await loadContractInfo(getContractStore(), jobId);
+  const aerialJob = await getAerialStore().getJob(jobId);
 
   return (
     <>
       <p><Link href="/jobs">{en.jobs.back}</Link></p>
       <h1>{en.scope.title(data.job.jobNumber)}</h1>
+      {aerialJob && <AerialPanel job={aerialJob} isAdmin={user.role === "admin"} />}
       <MeasurementsPanel jobId={data.job.id} />
       <ScopeBuilder
         jobId={data.job.id}

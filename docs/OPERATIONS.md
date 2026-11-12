@@ -119,6 +119,7 @@ Railway's backups live inside Railway. For a copy somewhere else, run the `pg_du
 | `INTEGRATION_KEY` | encrypting Hover tokens | 32 random bytes, base64. Losing it means reconnecting Hover. |
 | `HOVER_CLIENT_ID`, `HOVER_CLIENT_SECRET`, `HOVER_REDIRECT_URI` | Hover | See SPEC decision log. |
 | `COMPANYCAM_ACCESS_TOKEN` | CompanyCam | Expires every 90 days (next: Jan 3, 2027). An expired token now fails the cron run and emails `ALERT_EMAILS`. |
+| `GOOGLE_MAPS_API_KEY` | Aerial roof estimate | Needs the Geocoding, Solar and Maps Static APIs enabled on the key; Google bills each call. Without it nothing is fetched. The feature also has its own switch in Settings, Aerial estimates (off by default). |
 | `WEBSITE_FORM_SECRET` | website form endpoint | Shared secret header. |
 | `PRUETT_FEED_URL`, `PRUETT_FEED_KEY`, `PRUETT_PRICE_LEVEL` | nightly price sync (Pruett cron service) and Settings, Product catalog, "Sync from Pruett now" (web service) | Key equals `PRICE_FEED_KEY` in Pruett POS. Level defaults to Builder. The older `PRUETT_POS_API_URL` / `PRUETT_POS_API_KEY` names still work when these are empty. |
 | `QBO_*`, `DEMANDIQ_WEBHOOK_SECRET` | later slices | Not used yet. |

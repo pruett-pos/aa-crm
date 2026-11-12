@@ -31,7 +31,7 @@ export default async function LeadsPage() {
           <tbody>
             {leads.map((l) => (
               <tr key={l.jobId}>
-                <td>{l.jobNumber}</td>
+                <td><Link href={`/jobs/${l.jobId}`}>{l.jobNumber}</Link></td>
                 <td>{l.customerName}<br /><span className="muted small-text">{l.phone ?? ""}</span></td>
                 <td>{l.street}, {l.city}<br /><span className="muted small-text">{en.leads.markets[l.market]}</span></td>
                 <td>{en.leads.jobTypes[l.jobType as "retail" | "insurance"] ?? l.jobType}<br />

@@ -83,3 +83,5 @@ fieldset.divisions .check { font-weight: 400; }
   .report { break-inside: avoid; }
 }
 .small-heading { font-size: 0.95rem; margin: 0.25rem 0; color: #5c5a54; font-weight: 600; }
+.aerial-image { display: block; width: 100%; max-width: 420px; height: auto; border-radius: 6px; border: 1px solid #d9d4c7; margin-bottom: 0.75rem; }
+table.lines th.num { text-align: right; }

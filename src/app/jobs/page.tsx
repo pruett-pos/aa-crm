@@ -34,7 +34,7 @@ export default async function JobsPage() {
         <ul className="list">
           {visible.map(({ j, scopes, payments }) => (
             <li key={j.id}>
-              <strong>{en.jobs.number} {j.jobNumber}</strong>{" "}
+              <strong><Link href={`/jobs/${j.id}`}>{en.jobs.number} {j.jobNumber}</Link></strong>{" "}
               {needingColors.has(j.id) && (user.role === "admin" || (user.role === "estimator" && j.estimatorId === user.id)) && (
                 <Link href={`/jobs/${j.id}/production`} className="warn">{en.jobs.colorsNeeded(needingColors.get(j.id) ?? 0)}</Link>
               )}{" "}

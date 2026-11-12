@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/index.ts";
 import { allow } from "@/lib/auth/rate-limit.ts";
+import { fetchAerialBestEffort } from "@/lib/aerial/index.ts";
 import { ensureProjectBestEffort } from "@/lib/companycam/index.ts";
 import { getLeadStore } from "@/lib/leads/index.ts";
 import { createLead } from "@/lib/leads/logic.ts";
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
       divisions: b.divisions, source: b.source, appointmentAt, overrideEstimatorId: b.overrideEstimatorId ?? null,
     });
     ensureProjectBestEffort(r.jobId);   // never blocks or fails the lead
+    if (appointmentAt) fetchAerialBestEffort(r.jobId);   // aerial roof estimate, in the background; never blocks or fails the booking
     return Response.json(r, { status: 201 });
   } catch (e) {
     return leadErrorResponse(e);

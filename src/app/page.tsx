@@ -50,6 +50,7 @@ export default async function HomePage() {
       {user.role === "admin" && <p><Link href="/settings/hover">{en.hover.title}</Link></p>}
       {user.role === "admin" && <p><Link href="/settings/products">{en.catalog.title}</Link></p>}
       {user.role === "admin" && <p><Link href="/settings/assemblies">{en.assemblies.title}</Link></p>}
+      {user.role === "admin" && <p><Link href="/settings/aerial">{en.aerial.settings.title}</Link></p>}
       {hasRole(user.role, ["admin", "estimator", "production_manager", "accounting"]) && (
         <p><Link href="/jobs">{en.jobs.navLabel}</Link></p>
       )}

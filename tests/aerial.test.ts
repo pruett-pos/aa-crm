@@ -450,3 +450,21 @@ test("settings: percents become basis points and feet become tenths; out-of-rang
   assert.equal(panelState(null, false), "off");
   assert.equal(panelState(null, true), "none");
 });
+
+// ---------- never on a contract or a material order ----------
+test("contracts, scopes, measurements, material orders and work orders never read the aerial estimate", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const lib = new URL("../src/lib/", import.meta.url).pathname;
+  const offenders: string[] = [];
+  for (const dir of ["contracts", "scopes", "measurements", "estimating", "production", "workorders", "closeout", "payments"]) {
+    for (const f of readdirSync(`${lib}${dir}`)) {
+      if (/aerial|google-solar/i.test(readFileSync(`${lib}${dir}/${f}`, "utf8"))) offenders.push(`${dir}/${f}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+  // And the aerial code has no way to write a job's measurements or a scope.
+  for (const f of readdirSync(`${lib}aerial`)) {
+    const src = readFileSync(`${lib}aerial/${f}`, "utf8");
+    assert.ok(!/jobMeasurement\.(create|update|upsert)|saveScope|measurements\.insert/.test(src), `aerial/${f} must not write measurements or scopes`);
+  }
+});
